@@ -53,20 +53,19 @@ with tab2:
             case_text = uploaded_file.getvalue().decode("utf-8")
             st.success(f"✅ Text ఫైల్ లోడ్ అయింది: {uploaded_file.name}")
 
-# కొత్త చట్టాల (BNS, BNSS, BSA) కోసం కఠినమైన ప్రాంప్ట్
+# కొత్త మరియు పాత చట్టాల పోలికతో కూడిన ప్రాంప్ట్
 legal_system_instruction = """
-మీరు పూర్తిగా కొత్త భారతీయ క్రిమినల్ చట్టాలైన భారతీయ న్యాయ సంహిత (Bharatiya Nyaya Sanhita - BNS), భారతీయ నాగరిక సురక్ష సంహిత (Bharatiya Nagarik Suraksha Sanhita - BNSS), మరియు భారతీయ సాక్ష్య అధినియమం (Bharatiya Sakshya Adhiniyam - BSA) పై మాత్రమే ఆధారపడే అధికారిక లీగల్ అసిస్టెంట్.
+మీరు భారతీయ క్రిమినల్ చట్టాలు (Bharatiya Nyaya Sanhita - BNS, Bharatiya Nagarik Suraksha Sanhita - BNSS, Bharatiya Sakshya Adhiniyam - BSA) మరియు వాటి పాత చట్టాలైన IPC, CrPC, Indian Evidence Act (IEA) లపై పూర్తి అవగాహన ఉన్న అధికారిక లీగల్ అసిస్టెంట్.
 
-⚠️ అత్యంత ముఖ్యమైన నిబంధనలు:
-1. పాత IPC (Indian Penal Code), CrPC, లేదా Indian Evidence Act లకు సంబంధించిన పాత సెక్షన్లను ఎట్టి పరిస్థితుల్లోనూ వాడవద్దు, ప్రస్తావించవద్దు.
-2. కేవలం కొత్త BNS సెక్షన్లు (ఉదా: దొంగతనానికి BNS Section 303 లేదా 305, అతిక్రమణకు BNS Section 329/331 వంటివి), BNSS ప్రొసీజర్లు మరియు BSA నిబంధనలను మాత్రమే ఖచ్చితంగా పేర్కొనాలి.
-3. విశ్లేషణ పూర్తిగా స్పష్టమైన తెలుగులో ఉండాలి. ముఖ్యమైన సెక్షన్ పేర్లు, వర్గీకరణలను బ్రాకెట్లలో ఇంగ్లీష్‌లో పేర్కొనండి.
+ముఖ్య మార్గదర్శకాలు:
+1. ప్రతి సెక్షన్‌ను సూచించేటప్పుడు, **కొత్త చట్టం (BNS/BNSS/BSA) తో పాటు దాని పాత రూపం (IPC/CrPC/IEA)** కచ్చితంగా పక్కపక్కనే (ఉదాహరణకు: BNS Section 303 / పాత IPC Section 379) పేర్కొనాలి.
+2. విశ్లేషణ పూర్తిగా స్పష్టమైన తెలుగులో ఉండాలి.
 
 క్రింది క్రమం (Headings) లో మాత్రమే నివేదిక రూపొందించాలి:
-1. వర్తించే BNS Sections & Punishments (కేవలం కొత్త BNS సెక్షన్లు, శిక్షల వివరాలు)
-2. నేరం యొక్క వర్గీకరణ (Cognizable/Non-Cognizable, Bailable/Non-Bailable, Compoundable/Non-Compoundable)
-3. BNSS Procedures & Timelines (నోటీసులు, అరెస్ట్ నిబంధనలు, రిమాండ్, దర్యాప్తు సమయ పరిమితులు)
-4. BSA Evidence & Forensic Guidelines (సాక్ష్యాధారాల సేకరణ, డిజిటల్/ఎలక్ట్రానిక్ సాక్ష్యాల సర్టిఫికేషన్, ఫోరెన్సిక్ మార్గదర్శకాలు)
+1. వర్తించే Sections & Punishments (కొత్త BNS సెక్షన్లు మరియు పాత IPC సెక్షన్ల పోలికతో శిక్షలు)
+2. నేరం యొక్క వర్గీకరణ (Cognizable/Non-Cognizable, Bailable/Non-Bailable)
+3. Procedures & Timelines (కొత్త BNSS మరియు పాత CrPC నిబంధనలు, నోటీసులు, అరెస్ట్, రిమాండ్)
+4. Evidence & Forensic Guidelines (కొత్త BSA మరియు పాత IEA సాక్ష్యాధారాల నిబంధనలు)
 5. IO (Investigating Officer) కోసం Action Checklist
 
 చివరలో తప్పనిసరిగా:
@@ -77,11 +76,10 @@ if st.button("కేస్ విశ్లేషించండి (Analyze)", t
     if not case_text.strip():
         st.warning("దయచేసి ఫిర్యాదు వివరాలను నమోదు చేయండి లేదా ఫైల్ అప్‌లోడ్ చేయండి.")
     else:
-        with st.spinner("కొత్త చట్టాలు (BNS, BNSS, BSA) ప్రకారం విశ్లేషిస్తోంది..."):
+        with st.spinner("కొత్త మరియు పాత చట్టాల ప్రకారం విశ్లేషిస్తోంది..."):
             try:
                 client = Groq(api_key=api_key)
 
-                # మీ అకౌంట్‌లో యాక్టివ్‌గా ఉన్న మోడల్‌ను ఆటోమేటిక్‌గా ఎంచుకోవడం
                 models_data = client.models.list().data
                 valid_models = [
                     m.id for m in models_data 
@@ -101,13 +99,13 @@ if st.button("కేస్ విశ్లేషించండి (Analyze)", t
                 result = response.choices[0].message.content
 
                 if result:
-                    st.markdown("### 📋 దర్యాప్తు నివేదిక:")
+                    st.markdown("### 📋 దర్యాప్తు నివేదిక (కొత్త & పాత చట్టాలు):")
                     st.markdown(result)
 
                     st.download_button(
                         label="📥 నివేదిక డౌన్‌లోడ్ చేయండి (TXT)",
                         data=result,
-                        file_name="BNS_Legal_Report.txt",
+                        file_name="Legal_Report_BNS_IPC.txt",
                         mime="text/plain"
                     )
 
