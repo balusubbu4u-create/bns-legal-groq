@@ -18,19 +18,7 @@ if "GROQ_API_KEY" not in st.secrets:
 
 api_key = st.secrets["GROQ_API_KEY"]
 
-# సైడ్‌బార్‌లో మోడల్ వెర్షన్ల ఎంపిక
-st.sidebar.header("⚙️ సెట్టింగ్స్ & వెర్షన్లు")
-available_models = [
-    "llama-3.1-8b-instant",
-    "llama-3.3-70b-versatile",
-    "gemma2-9b-it"
-]
-selected_model = st.sidebar.selectbox(
-    "AI Model వెర్షన్ ఎంచుకోండి:",
-    options=available_models,
-    index=0
-)
-
+# టెక్స్ట్ లేదా PDF అప్‌లోడ్ ట్యాబ్‌లు
 tab1, tab2 = st.tabs(["📝 టెక్స్ట్ వివరాలు", "📁 PDF / Text ఫైల్ అప్‌లోడ్"])
 
 case_text = ""
@@ -66,7 +54,7 @@ with tab2:
             case_text = uploaded_file.getvalue().decode("utf-8")
             st.success(f"✅ Text ఫైల్ లోడ్ అయింది: {uploaded_file.name}")
 
-# సంక్షిప్తమైన మరియు కచ్చితమైన ప్రాంప్ట్ (400 ఎర్రర్ రాకుండా)
+# సంక్షిప్తమైన మరియు కచ్చితమైన ప్రాంప్ట్
 legal_system_instruction = """
 మీరు భారతీయ క్రిమినల్ చట్టాల (BNS, BNSS, BSA) మరియు పాత చట్టాల (IPC, CrPC, IEA) నిపుణులైన లీగల్ అసిస్టెంట్. 
 ప్రతి సెక్షన్‌కు కొత్త చట్టం మరియు పాత చట్టం రెండూ (ఉదా: BNS Section 303 / IPC Section 379) పక్కపక్కనే తెలుగులో రాయండి.
@@ -83,17 +71,23 @@ if st.button("కేస్ విశ్లేషించండి (Analyze)", t
     if not case_text.strip():
         st.warning("దయచేసి ఫిర్యాదు వివరాలను నమోదు చేయండి లేదా ఫైల్ అప్‌లోడ్ చేయండి.")
     else:
-        # టెక్స్ట్ పరిమాణాన్ని కంట్రోల్ చేయడం
         trimmed_case_text = case_text[:2000]
 
         with st.spinner("చట్టాల ప్రకారం విశ్లేషిస్తోంది..."):
             try:
                 client = Groq(api_key=api_key)
 
+                # సర్వర్ నుండి అందుబాటులో ఉన్న మోడల్స్‌ను ఆటోమేటిక్‌గా ఫెచ్ చేయడం
+                models_data = client.models.list().data
+                all_ids = [m.id for m in models_data if "whisper" not in m.id and "guard" not in m.id]
+                
+                # అందుబాటులో ఉన్న మొదటి మోడల్‌ను ఆటోమేటిక్‌గా ఎంచుకుంటుంది (404 ఎర్రర్ రాదు)
+                chosen_model = all_ids[0] if all_ids else "llama-3.1-8b-instant"
+
                 response = client.chat.completions.create(
-                    model=selected_model,
+                    model=chosen_model,
                     temperature=0.0,
-                    max_tokens=400,  # ఎర్రర్ రాకుండా టోకెన్ పరిమితి తగ్గించబడింది
+                    max_tokens=400,
                     messages=[
                         {"role": "system", "content": legal_system_instruction},
                         {"role": "user", "content": f"ఫిర్యాదు వివరాలు:\n{trimmed_case_text}"}
