@@ -66,31 +66,25 @@ with tab2:
             case_text = uploaded_file.getvalue().decode("utf-8")
             st.success(f"✅ Text ఫైల్ లోడ్ అయింది: {uploaded_file.name}")
 
-# కొత్త మరియు పాత చట్టాల పోలికతో పాటు దర్యాప్తు విధానాల కోసం విస్తృతమైన ప్రాంప్ట్
+# సంక్షిప్తమైన మరియు కచ్చితమైన ప్రాంప్ట్ (400 ఎర్రర్ రాకుండా)
 legal_system_instruction = """
-మీరు భారతీయ క్రిమినల్ చట్టాలు (Bharatiya Nyaya Sanhita - BNS, Bharatiya Nagarik Suraksha Sanhita - BNSS, Bharatiya Sakshya Adhiniyam - BSA) మరియు వాటి పాత చట్టాలైన IPC, CrPC, Indian Evidence Act (IEA) లపై పూర్తి అవగాహన ఉన్న అధికారిక లీగల్ అసిస్టెంట్.
+మీరు భారతీయ క్రిమినల్ చట్టాల (BNS, BNSS, BSA) మరియు పాత చట్టాల (IPC, CrPC, IEA) నిపుణులైన లీగల్ అసిస్టెంట్. 
+ప్రతి సెక్షన్‌కు కొత్త చట్టం మరియు పాత చట్టం రెండూ (ఉదా: BNS Section 303 / IPC Section 379) పక్కపక్కనే తెలుగులో రాయండి.
 
-ముఖ్య మార్గదర్శకాలు:
-1. ప్రతి సెక్షన్‌ను సూచించేటప్పుడు, కొత్త చట్టం (BNS/BNSS/BSA) తో పాటు దాని పాత రూపం (IPC/CrPC/IEA) పక్కపక్కనే (ఉదాహరణకు: BNS Section 303 / పాత IPC Section 379) స్పష్టంగా పేర్కొనాలి.
-2. దర్యాప్తు విధానాలు (Investigation Procedures), ఎఫ్‌ఐఆర్ నమోదు, సెర్చ్ & సీజర్, అరెస్ట్ నిబంధనలు మరియు కాలపరిమితులు (Timelines) చాలా స్పష్టంగా మరియు విస్తృతంగా రాయాలి.
-3. విశ్లేషణ స్పష్టమైన తెలుగులో ఉండాలి.
-
-క్రింది క్రమం (Headings) లో నివేదిక రూపొందించండి:
-1. వర్తించే Sections & Punishments (కొత్త BNS మరియు పాత IPC సెక్షన్ల పోలికతో శిక్షలు)
-2. నేరం యొక్క వర్గీకరణ (Cognizable/Non-Cognizable, Bailable/Non-Bailable)
-3. Procedures & Timelines (కొత్త BNSS మరియు పాత CrPC నిబంధనలు: ఎఫ్ఐఆర్ నమోదు, దర్యాప్తు పద్ధతులు, కాలపరిమితులు)
-4. Evidence Guidelines (కొత్త BSA మరియు పాత IEA మార్గదర్శకాలు)
-5. IO Action Checklist (దర్యాప్తు అధికారి చేయవలసిన పనులు)
-
-చివరలో తప్పనిసరిగా:
-"గమనిక: ఇది ప్రాథమిక సమాచారం మరియు దర్యాప్తు మార్గదర్శకత్వం కోసం మాత్రమే; తుది చట్టపరమైన నిర్ణయాల కోసం న్యాయ నిపుణులను సంప్రదించాలి." అని రాయండి.
+నివేదిక ఈ క్రమంలో ఉండాలి:
+1. Sections & Punishments (కొత్త & పాత సెక్షన్లు, శిక్షలు)
+2. నేర వర్గీకరణ (Cognizable/Bailable)
+3. Procedures & Timelines (BNSS & CrPC దర్యాప్తు పద్ధతులు, కాలపరిమితులు)
+4. Evidence Guidelines (BSA & IEA)
+5. IO Action Checklist
 """
 
 if st.button("కేస్ విశ్లేషించండి (Analyze)", type="primary"):
     if not case_text.strip():
         st.warning("దయచేసి ఫిర్యాదు వివరాలను నమోదు చేయండి లేదా ఫైల్ అప్‌లోడ్ చేయండి.")
     else:
-        trimmed_case_text = case_text[:3000]
+        # టెక్స్ట్ పరిమాణాన్ని కంట్రోల్ చేయడం
+        trimmed_case_text = case_text[:2000]
 
         with st.spinner("చట్టాల ప్రకారం విశ్లేషిస్తోంది..."):
             try:
@@ -99,7 +93,7 @@ if st.button("కేస్ విశ్లేషించండి (Analyze)", t
                 response = client.chat.completions.create(
                     model=selected_model,
                     temperature=0.0,
-                    max_tokens=512,
+                    max_tokens=400,  # ఎర్రర్ రాకుండా టోకెన్ పరిమితి తగ్గించబడింది
                     messages=[
                         {"role": "system", "content": legal_system_instruction},
                         {"role": "user", "content": f"ఫిర్యాదు వివరాలు:\n{trimmed_case_text}"}
