@@ -3,7 +3,7 @@ from groq import Groq
 from pypdf import PdfReader
 
 st.set_page_config(
-    page_title="BNS Legal Assistant (Groq)",
+    page_title="BNS Legal Assistant",
     page_icon="⚖️",
     layout="centered"
 )
@@ -11,25 +11,12 @@ st.set_page_config(
 st.title("⚖️ BNS, BNSS & BSA లీగల్ అసిస్టెంట్")
 st.write("కేసు వివరాలు నమోదు చేయండి లేదా PDF ఫిర్యాదు కాపీని అప్‌లోడ్ చేయండి.")
 
-# సైడ్‌బార్‌లో API Key మరియు మోడల్ ఎంపిక
-st.sidebar.header("⚙️ సెట్టింగ్స్")
-api_key = st.secrets.get("GROQ_API_KEY") or st.sidebar.text_input(
-    "🔑 Groq API Key:",
-    type="password"
-)
+# Streamlit Secrets నుండి నేరుగా కీ తీసుకోవడం
+if "GROQ_API_KEY" not in st.secrets:
+    st.error("Streamlit Secrets లో GROQ_API_KEY కనిపించలేదు. దయచేసి App Settings -> Secrets లో కీ ని సేవ్ చేయండి.")
+    st.stop()
 
-# Groq అధికారిక యాక్టివ్ మోడల్స్ జాబితా
-ACTIVE_MODELS = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-    "gemma2-9b-it"
-]
-
-selected_model = st.sidebar.selectbox(
-    "AI Model ఎంచుకోండి:",
-    options=ACTIVE_MODELS,
-    index=0
-)
+api_key = st.secrets["GROQ_API_KEY"]
 
 tab1, tab2 = st.tabs(["📝 టెక్స్ట్ వివరాలు", "📁 PDF / Text ఫైల్ అప్‌లోడ్"])
 
@@ -70,13 +57,7 @@ with tab2:
 legal_system_instruction = """
 మీరు భారతీయ క్రిమినల్ చట్టాలు (Bharatiya Nyaya Sanhita - BNS, Bharatiya Nagarik Suraksha Sanhita - BNSS, Bharatiya Sakshya Adhiniyam - BSA) పై ప్రావీణ్యం ఉన్న అధికారిక లీగల్ అసిస్టెంట్.
 
-ముఖ్య నియమాలు & మార్గదర్శకాలు:
-1. వాస్తవాల ఆధారితం: అందించిన ఫిర్యాదులోని వాస్తవాల ఆధారంగా మాత్రమే ఖచ్చితమైన సెక్షన్లు పేర్కొనాలి.
-2. ఖచ్చితత్వం: చట్టపరమైన సెక్షన్లలో ఎలాంటి ఊహాజనిత నంబర్లు చెప్పకూడదు.
-3. లీగల్ టెర్మినాలజీ: విశ్లేషణ తెలుగులో ఉండాలి. ముఖ్యమైన సెక్షన్ పేర్లను బ్రాకెట్లలో ఇంగ్లీష్‌లో కూడా రాయాలి.
-4. కాలపరిమితులు: BNSS ప్రకారం దర్యాప్తుకు వర్తించే టైమ్‌లైన్స్ స్పష్టంగా ప్రస్తావించాలి.
-
-క్రింది నిర్మాణం (Headings) లో మాత్రమే నివేదిక అందించాలి:
+క్రింది నిర్మాణం (Headings) లో మాత్రమే తెలుగులో నివేదిక అందించాలి:
 1. వర్తించే BNS Sections & Punishments (పాత IPC పోలికలతో)
 2. BNSS Procedures & Timelines (నోటీసులు, అరెస్ట్, రిమాండ్ నిబంధనలు)
 3. BSA Evidence & Forensic Guidelines (సాక్ష్యాధారాలు, ఫోరెన్సిక్ నిబంధనలు)
@@ -89,15 +70,18 @@ legal_system_instruction = """
 if st.button("కేస్ విశ్లేషించండి (Analyze)", type="primary"):
     if not case_text.strip():
         st.warning("దయచేసి ఫిర్యాదు వివరాలను నమోదు చేయండి లేదా PDF ఫైల్ అప్‌లోడ్ చేయండి.")
-    elif not api_key:
-        st.error("Groq API Key కాన్ఫిగర్ చేయబడలేదు. దయచేసి ఎడమవైపు సైడ్‌బార్‌లో Key ఇవ్వండి.")
     else:
-        with st.spinner(f"Groq ({selected_model}) ద్వారా చట్టాలను పరిశీలిస్తోంది..."):
+        with st.spinner("చట్టాలను పరిశీలిస్తోంది..."):
             try:
                 client = Groq(api_key=api_key)
 
+                # మీ అకౌంట్‌లో యాక్టివ్‌గా ఉన్న మోడల్‌ను ఆటోమేటిక్‌గా ఎంచుకోవడం
+                models_data = client.models.list().data
+                valid_models = [m.id for m in models_data if "whisper" not in m.id and "guard" not in m.id]
+                chosen_model = valid_models[0] if valid_models else "llama-3.1-8b-instant"
+
                 response = client.chat.completions.create(
-                    model=selected_model,
+                    model=chosen_model,
                     temperature=0.0,
                     messages=[
                         {"role": "system", "content": legal_system_instruction},
