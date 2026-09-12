@@ -9,7 +9,7 @@ import io
 
 
 # =========================================================
-# PAGE CONFIGURATION
+# PAGE SETTINGS
 # =========================================================
 
 st.set_page_config(
@@ -27,7 +27,7 @@ st.caption(
 
 
 # =========================================================
-# API KEY
+# GROQ API KEY
 # =========================================================
 
 if "GROQ_API_KEY" not in st.secrets:
@@ -43,7 +43,7 @@ client = Groq(api_key=api_key)
 
 
 # =========================================================
-# GET LIVE GROQ MODELS
+# GET AVAILABLE GROQ MODELS
 # =========================================================
 
 @st.cache_data(ttl=3600)
@@ -52,11 +52,11 @@ def get_available_groq_models(key):
     try:
         temp_client = Groq(api_key=key)
 
-        models = temp_client.models.list().data
+        models_data = temp_client.models.list().data
 
-        result = []
+        models = []
 
-        for model in models:
+        for model in models_data:
 
             model_id = model.id.lower()
 
@@ -69,9 +69,9 @@ def get_available_groq_models(key):
             ]):
                 continue
 
-            result.append(model.id)
+            models.append(model.id)
 
-        return sorted(result)
+        return sorted(models)
 
     except Exception:
         return []
@@ -89,7 +89,6 @@ st.sidebar.header("⚙️ మోడల్ సెట్టింగ్స్")
 
 if available_models:
 
-    # Preferred text models
     preferred_models = [
         "openai/gpt-oss-120b",
         "qwen/qwen3.6-27b",
@@ -117,9 +116,10 @@ if available_models:
 else:
 
     st.error(
-        "Groq models list చేయలేకపోయాము. "
-        "GROQ_API_KEY మరియు internet connection check చేయండి."
+        "❌ Groq models list చేయలేకపోయాము. "
+        "GROQ_API_KEYను check చేయండి."
     )
+
     st.stop()
 
 
@@ -132,29 +132,31 @@ VISION_MODELS = [
     "qwen/qwen3.8-27b"
 ]
 
-
 available_vision_models = [
     model
     for model in VISION_MODELS
     if model in available_models
 ]
 
-
 if available_vision_models:
-
     vision_model = available_vision_models[0]
-
 else:
-
     vision_model = None
 
 
 st.sidebar.markdown("---")
 
-st.sidebar.info(
-    f"🖼️ Image Analysis Model:\n\n"
-    f"{vision_model if vision_model else 'Vision model unavailable'}"
-)
+if vision_model:
+
+    st.sidebar.success(
+        f"🖼️ Image Model:\n{vision_model}"
+    )
+
+else:
+
+    st.sidebar.warning(
+        "🖼️ Vision model అందుబాటులో లేదు."
+    )
 
 
 st.sidebar.markdown("---")
@@ -163,22 +165,22 @@ st.sidebar.markdown(
     """
 ### ⚖️ ఈ Appలో
 
-- BNS vs IPC
-- BNSS vs CrPC
-- BSA vs IEA
-- FIR Analysis
-- Investigation Procedure
-- Digital Evidence
-- CCTV / CDR
-- Forensic Evidence
-- IO Checklist
-- Section 63 BSA
+- 🔹 BNS vs IPC
+- 🔹 BNSS vs CrPC
+- 🔹 BSA vs IEA
+- 🔹 FIR Analysis
+- 🔹 Investigation Procedure
+- 🔹 Digital Evidence
+- 🔹 CCTV / CDR
+- 🔹 Forensic Evidence
+- 🔹 IO Checklist
+- 🔹 BSA Section 63
 """
 )
 
 
 # =========================================================
-# LEGAL SYSTEM PROMPT
+# LEGAL SYSTEM INSTRUCTION
 # =========================================================
 
 legal_system_instruction = """
@@ -192,7 +194,7 @@ BNS - Bharatiya Nyaya Sanhita
 BNSS - Bharatiya Nagarik Suraksha Sanhita
 BSA - Bharatiya Sakshya Adhiniyam
 
-మరియు అవసరమైనప్పుడు పాత:
+మరియు అవసరమైనప్పుడు:
 
 IPC
 CrPC
@@ -200,57 +202,57 @@ Indian Evidence Act
 
 తో పోల్చి విశ్లేషించాలి.
 
-చాలా ముఖ్యమైన నియమం:
+========================================================
 
-కేసు facts ఆధారంగా మాత్రమే సెక్షన్లు సూచించాలి.
-ఊహించి లేదా తప్పు Section number చెప్పకూడదు.
+ముఖ్యమైన ఖచ్చితత్వ నియమాలు:
 
-Section numberపై పూర్తి నమ్మకం లేకపోతే
-"ధృవీకరణ అవసరం" అని స్పష్టంగా పేర్కొనాలి.
+1. కేసులో ఉన్న facts ఆధారంగానే section సూచించాలి.
 
-================================================
+2. ఊహించి section number చెప్పకూడదు.
 
-1. CASE FACTS SUMMARY
+3. Section numberపై సందేహం ఉంటే
+   "ధృవీకరణ అవసరం" అని స్పష్టంగా చెప్పాలి.
+
+4. కొత్త BNS/BNSS/BSA provisions మరియు
+   పాత IPC/CrPC/IEA provisions మధ్య
+   సరైన comparison ఇవ్వాలి.
+
+5. శిక్ష, జరిమానా, Cognizable,
+   Non-Cognizable, Bailable,
+   Non-Bailable వివరాలను సాధ్యమైనంత
+   స్పష్టంగా ఇవ్వాలి.
+
+========================================================
+
+### 1. CASE FACTS SUMMARY
 
 ముందుగా:
 
-- ఫిర్యాదులోని ప్రధాన సంఘటన
+- సంఘటన
 - బాధితుడు
 - నిందితుడి పాత్ర
-- జరిగిన ప్రదేశం
-- సమయం
-- నష్టం / గాయం
+- సంఘటన స్థలం
+- సంఘటన సమయం
+- గాయాలు / నష్టం
 - అందుబాటులో ఉన్న ఆధారాలు
 
 సంక్షిప్తంగా ఇవ్వాలి.
 
-================================================
+========================================================
 
-2. APPLICABLE OFFENCES
+### 2. వర్తించే సెక్షన్లు
 
-ప్రతి వర్తించే నేరానికి:
+టేబుల్ రూపంలో:
 
-- BNS Section
-- సంబంధిత IPC Section (ఉంటే)
-- నేరం పేరు
-- శిక్ష
-- జరిమానా
-- Cognizable / Non-Cognizable
-- Bailable / Non-Bailable
+| నేరం | BNS | IPC | శిక్ష | Cognizable | Bailable |
 
-టేబుల్ రూపంలో ఇవ్వాలి.
+కేసు factsకు వర్తించని sections పెట్టకూడదు.
 
-Section applicable కాకపోతే
-బలవంతంగా section పెట్టకూడదు.
+========================================================
 
-================================================
+### 3. దర్యాప్తు విధానం
 
-3. INVESTIGATION PROCEDURE
-
-IO చేయాల్సిన చర్యలను
-మొదటి నుండి చివరి వరకు క్రమంలో ఇవ్వాలి.
-
-ఉదాహరణ:
+IO చేయాల్సిన చర్యలను క్రమంగా వివరించాలి:
 
 1. FIR / information
 2. Scene visit
@@ -266,15 +268,15 @@ IO చేయాల్సిన చర్యలను
 12. Mobile / digital evidence
 13. Medical examination
 14. Forensic examination
-15. Accused examination / arrest decision
+15. Arrest / notice decision
 16. Case diary
 17. Final report / charge sheet
 
 సంబంధిత BNSS provisions ఇవ్వాలి.
 
-================================================
+========================================================
 
-4. ARREST / NOTICE
+### 4. ARREST / NOTICE
 
 అరెస్ట్ అవసరమా?
 
@@ -284,12 +286,13 @@ BNSS Section 35 వర్తిస్తుందా?
 
 అరెస్ట్‌కు కారణాలు ఏమిటి?
 
-24 గంటలలో Magistrate ముందు హాజరు
-మరియు remand provisions గురించి చెప్పాలి.
+24 గంటలలో Magistrate ముందు హాజరు,
+remand మరియు custody provisions
+స్పష్టంగా వివరించాలి.
 
-================================================
+========================================================
 
-5. SEARCH & SEIZURE
+### 5. SEARCH & SEIZURE
 
 సంబంధిత BNSS provisions ఆధారంగా:
 
@@ -297,14 +300,14 @@ BNSS Section 35 వర్తిస్తుందా?
 - Seizure
 - Panch witnesses
 - Mahazar
-- Audio/video recording
+- Audio / Video recording
 - Chain of custody
 
 వివరించాలి.
 
-================================================
+========================================================
 
-6. DIGITAL / ELECTRONIC EVIDENCE
+### 6. DIGITAL / ELECTRONIC EVIDENCE
 
 కేసులో digital evidence ఉంటే:
 
@@ -319,17 +322,16 @@ BNSS Section 35 వర్తిస్తుందా?
 - Computer
 - GPS / location data
 
-వాటిని గుర్తించాలి.
+గుర్తించాలి.
 
 BSA Section 63 certificate అవసరమా,
 ఎప్పుడు అవసరం,
-ఎవరు ఇవ్వాలి,
-ఏ electronic recordకు వర్తిస్తుందో
-స్పష్టంగా వివరించాలి.
+ఎలాంటి electronic recordకు వర్తిస్తుంది
+అనే విషయాలను స్పష్టంగా వివరించాలి.
 
-================================================
+========================================================
 
-7. FORENSIC EVIDENCE
+### 7. FORENSIC EVIDENCE
 
 అవసరమైతే:
 
@@ -340,16 +342,16 @@ BSA Section 63 certificate అవసరమా,
 - Weapon
 - Clothes
 - Digital forensic
-- CCTV forensic
 - Mobile forensic
+- CCTV forensic
 
-గురించి సూచించాలి.
+సూచించాలి.
 
-================================================
+========================================================
 
-8. IO ACTION CHECKLIST
+### 8. IO ACTION CHECKLIST
 
-తప్పనిసరిగా checklist ఇవ్వాలి:
+తప్పనిసరిగా:
 
 [ ] FIR / complaint verification
 [ ] Scene visit
@@ -368,18 +370,17 @@ BSA Section 63 certificate అవసరమా,
 [ ] Case diary
 [ ] Final report / charge sheet
 
-================================================
+========================================================
 
-9. MISSING EVIDENCE
+### 9. ఇంకా సేకరించాల్సిన ఆధారాలు
 
 ప్రస్తుత complaintలో లేని కానీ
-దర్యాప్తుకు అవసరమైన ఆధారాలను
-ప్రత్యేకంగా "ఇంకా సేకరించాల్సిన ఆధారాలు"
-అనే headingలో ఇవ్వాలి.
+దర్యాప్తుకు అవసరమైన evidenceను
+ప్రత్యేకంగా సూచించాలి.
 
-================================================
+========================================================
 
-10. LEGAL CAUTION
+### 10. LEGAL CAUTION
 
 ప్రస్తుత facts ఆధారంగా మాత్రమే analysis చేయాలి.
 
@@ -393,40 +394,49 @@ BSA Section 63 certificate అవసరమా,
 తుది చట్టపరమైన నిర్ణయాల కోసం
 న్యాయ నిపుణులను సంప్రదించాలి."
 
+అని రాయాలి.
 """
 
 
 # =========================================================
-# FILE READING FUNCTIONS
+# PDF TEXT EXTRACTION
 # =========================================================
 
-def extract_pdf_text(file):
+def extract_pdf_text(uploaded_file):
 
-    reader = PdfReader(file)
+    reader = PdfReader(uploaded_file)
 
-    text = []
+    pages_text = []
 
     for page in reader.pages:
 
-        page_text = page.extract_text()
+        text = page.extract_text()
 
-        if page_text:
-            text.append(page_text)
+        if text:
+            pages_text.append(text)
 
-    return "\n".join(text)
+    return "\n".join(pages_text)
 
 
-def extract_txt_text(file):
+# =========================================================
+# TXT EXTRACTION
+# =========================================================
 
-    return file.getvalue().decode(
+def extract_txt_text(uploaded_file):
+
+    return uploaded_file.getvalue().decode(
         "utf-8",
         errors="ignore"
     )
 
 
-def extract_docx_text(file):
+# =========================================================
+# DOCX EXTRACTION
+# =========================================================
 
-    document = Document(file)
+def extract_docx_text(uploaded_file):
+
+    document = Document(uploaded_file)
 
     paragraphs = []
 
@@ -442,7 +452,7 @@ def extract_docx_text(file):
 
 
 # =========================================================
-# IMAGE ENCODING
+# IMAGE BASE64
 # =========================================================
 
 def encode_image(uploaded_file):
@@ -462,22 +472,20 @@ def create_docx_report(report_text):
 
     document = Document()
 
-    title = document.add_heading(
+    document.add_heading(
         "BNS, BNSS & BSA దర్యాప్తు నివేదిక",
         level=1
     )
 
     for line in report_text.split("\n"):
 
-        if line.strip():
+        paragraph = document.add_paragraph(
+            line
+        )
 
-            paragraph = document.add_paragraph(
-                line
-            )
+        for run in paragraph.runs:
 
-            for run in paragraph.runs:
-
-                run.font.size = Pt(11)
+            run.font.size = Pt(11)
 
     buffer = io.BytesIO()
 
@@ -495,7 +503,7 @@ def create_docx_report(report_text):
 tab1, tab2 = st.tabs(
     [
         "📝 టెక్స్ట్ వివరాలు",
-        "📁 ఫైల్ / ఫోటో Upload"
+        "📁 PDF / Word / Photo Upload"
     ]
 )
 
@@ -513,10 +521,11 @@ image_mime = None
 with tab1:
 
     text_input = st.text_area(
-        "ఫిర్యాదు / FIR వివరాలు:",
+        "ఫిర్యాదు / FIR వివరాలు ఇక్కడ నమోదు చేయండి:",
         height=220,
         placeholder=(
-            "ఫిర్యాదు వివరాలను ఇక్కడ paste చేయండి..."
+            "ఉదాహరణ: అర్ధరాత్రి ఇంట్లోకి అక్రమంగా "
+            "ప్రవేశించి బంగారు నగలు, నగదు దోచుకెళ్లారు..."
         )
     )
 
@@ -543,7 +552,6 @@ with tab2:
         ]
     )
 
-
     if uploaded_file:
 
         file_name = uploaded_file.name.lower()
@@ -554,7 +562,7 @@ with tab2:
 
 
         # =================================================
-        # IMAGE
+        # JPG / JPEG / PNG
         # =================================================
 
         if file_name.endswith(
@@ -595,14 +603,13 @@ with tab2:
                 else:
 
                     st.warning(
-                        "⚠️ మీ Groq accountలో "
-                        "vision model కనిపించలేదు."
+                        "⚠️ Vision model అందుబాటులో లేదు."
                     )
 
             except Exception as e:
 
                 st.error(
-                    f"Image error: {e}"
+                    f"Image చదవడంలో error: {e}"
                 )
 
 
@@ -625,7 +632,7 @@ with tab2:
                     )
 
                     with st.expander(
-                        "📄 Extracted text చూడండి"
+                        "📄 PDF Text చూడండి"
                     ):
 
                         st.text(
@@ -637,14 +644,14 @@ with tab2:
                     st.warning(
                         "⚠️ ఈ PDF scanned/image PDF "
                         "లా కనిపిస్తోంది. "
-                        "PDF pagesను JPG/PNGగా upload "
-                        "చేయడం మంచిది."
+                        "అలాంటి PDFను JPG/PNGగా "
+                        "upload చేయండి."
                     )
 
             except Exception as e:
 
                 st.error(
-                    f"PDF చదవడంలో error: {e}"
+                    f"PDF error: {e}"
                 )
 
 
@@ -688,7 +695,7 @@ with tab2:
                 )
 
                 with st.expander(
-                    "📘 Extracted text చూడండి"
+                    "📘 Word Text చూడండి"
                 ):
 
                     st.text(
@@ -703,7 +710,7 @@ with tab2:
 
 
 # =========================================================
-# ANALYZE BUTTON
+# ANALYSIS BUTTON
 # =========================================================
 
 if st.button(
@@ -711,6 +718,9 @@ if st.button(
     type="primary",
     use_container_width=True
 ):
+
+    result = ""
+
 
     # =====================================================
     # IMAGE ANALYSIS
@@ -721,8 +731,8 @@ if st.button(
         if not vision_model:
 
             st.error(
-                "❌ Image analysis కోసం Groq Vision model "
-                "అందుబాటులో లేదు."
+                "❌ Image analysis కోసం "
+                "Vision model అందుబాటులో లేదు."
             )
 
             st.stop()
@@ -730,7 +740,7 @@ if st.button(
 
         with st.spinner(
             "🖼️ Image చదివి "
-            "legal analysis తయారు చేస్తోంది..."
+            "Legal Analysis తయారు చేస్తోంది..."
         ):
 
             try:
@@ -761,18 +771,18 @@ if st.button(
 
                                     "text":
                                         """
-ఈ imageలో ఉన్న FIR /
-complaint / handwritten or printed
-documentను జాగ్రత్తగా చదవండి.
+ఈ uploaded imageలో ఉన్న
+FIR / Complaint / documentను
+జాగ్రత్తగా చదవండి.
 
-ముందుగా imageలో కనిపించే factsను
-అర్థం చేసుకోండి.
+Imageలో స్పష్టంగా కనిపించే facts
+మాత్రమే ఉపయోగించండి.
 
 చదవలేని పదాలను ఊహించవద్దు.
 
-తర్వాత పై legal instructions ప్రకారం
-సమగ్ర BNS / BNSS / BSA
-దర్యాప్తు నివేదిక తయారు చేయండి.
+తర్వాత Legal System Instructions
+ప్రకారం BNS / BNSS / BSA
+సమగ్ర దర్యాప్తు నివేదిక తయారు చేయండి.
 """
                                 },
 
@@ -798,14 +808,11 @@ documentను జాగ్రత్తగా చదవండి.
                     .content
                 )
 
-
             except Exception as e:
 
                 st.error(
                     f"Image analysis error: {e}"
                 )
-
-                result = ""
 
 
     # =====================================================
@@ -814,13 +821,15 @@ documentను జాగ్రత్తగా చదవండి.
 
     elif case_text.strip():
 
-        # చాలా పెద్ద text అయితే మొదటి భాగం + చివరి భాగం
-        # రెండూ modelకి ఇవ్వడం
+        # పెద్ద complaint అయితే beginning + ending
+        # రెండూ పంపుతాం
         if len(case_text) > 12000:
 
             trimmed_case_text = (
                 case_text[:9000]
-                + "\n\n[మధ్యలోని text కుదించబడింది]\n\n"
+                + "\n\n"
+                + "[మధ్యలోని text పరిమితం చేయబడింది]"
+                + "\n\n"
                 + case_text[-3000:]
             )
 
@@ -831,7 +840,7 @@ documentను జాగ్రత్తగా చదవండి.
 
         with st.spinner(
             f"🤖 {selected_model} ద్వారా "
-            "legal analysis జరుగుతోంది..."
+            "Legal Analysis జరుగుతోంది..."
         ):
 
             try:
@@ -857,8 +866,9 @@ documentను జాగ్రత్తగా చదవండి.
 
                             "content":
                                 f"""
-క్రింది FIR / complaint / case details
-ఆధారంగా పూర్తి analysis ఇవ్వండి.
+క్రింది FIR / Complaint / Case Details
+ఆధారంగా పూర్తి Legal & Investigation
+Report తయారు చేయండి.
 
 ----------------------------
 
@@ -881,28 +891,23 @@ documentను జాగ్రత్తగా చదవండి.
                     .content
                 )
 
-
             except Exception as e:
 
                 st.error(
                     f"Analysis error: {e}"
                 )
 
-                result = ""
-
 
     else:
 
         st.warning(
-            "⚠️ Complaint text లేదా PDF / DOCX / "
-            "JPG / PNG file upload చేయండి."
+            "⚠️ Complaint text లేదా "
+            "PDF / DOCX / JPG / PNG file upload చేయండి."
         )
-
-        result = ""
 
 
     # =====================================================
-    # SHOW RESULT
+    # DISPLAY RESULT
     # =====================================================
 
     if result:
@@ -918,7 +923,7 @@ documentను జాగ్రత్తగా చదవండి.
 
 
         # =================================================
-        # DOWNLOAD TXT
+        # TXT DOWNLOAD
         # =================================================
 
         st.download_button(
@@ -936,17 +941,17 @@ documentను జాగ్రత్తగా చదవండి.
 
 
         # =================================================
-        # DOWNLOAD DOCX
+        # DOCX DOWNLOAD
         # =================================================
 
-        docx_file = create_docx_report(
+        docx_report = create_docx_report(
             result
         )
 
         st.download_button(
             label="📘 Word Report Download",
 
-            data=docx_file,
+            data=docx_report,
 
             file_name=
                 "BNS_Investigation_Report.docx",
@@ -955,4 +960,4 @@ documentను జాగ్రత్తగా చదవండి.
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 
             use_container_width=True
-)
+    )
