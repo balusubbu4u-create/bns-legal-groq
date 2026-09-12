@@ -8,13 +8,27 @@ st.set_page_config(
     layout="centered"
 )
 
-st.title("⚖️ BNS, BNSS & BSA లీగల్ అసిస్టెంట్ (Groq)")
-st.write("కేసు వివరాలు టైప్ చేయండి లేదా PDF / Text ఫిర్యాదు కాపీ అప్‌లోడ్ చేయండి.")
+st.title("⚖️ BNS, BNSS & BSA లీగల్ అసిస్టెంట్")
+st.write("కేసు వివరాలు నమోదు చేయండి లేదా PDF ఫిర్యాదు కాపీని అప్‌లోడ్ చేయండి.")
 
-# సైడ్‌బార్‌లో API Key ఆప్షన్
+# సైడ్‌బార్‌లో API Key మరియు మోడల్ ఎంపిక
+st.sidebar.header("⚙️ సెట్టింగ్స్")
 api_key = st.secrets.get("GROQ_API_KEY") or st.sidebar.text_input(
     "🔑 Groq API Key:",
     type="password"
+)
+
+# Groq అధికారిక యాక్టివ్ మోడల్స్ జాబితా
+ACTIVE_MODELS = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "gemma2-9b-it"
+]
+
+selected_model = st.sidebar.selectbox(
+    "AI Model ఎంచుకోండి:",
+    options=ACTIVE_MODELS,
+    index=0
 )
 
 tab1, tab2 = st.tabs(["📝 టెక్స్ట్ వివరాలు", "📁 PDF / Text ఫైల్ అప్‌లోడ్"])
@@ -23,7 +37,7 @@ case_text = ""
 
 with tab1:
     text_input = st.text_area(
-        "ఫిర్యాదు వివరాలు ఇక్కడ రాయండి:",
+        "ఫిర్యాదు వివరాలు ఇక్కడ నమోదు చేయండి:",
         height=160,
         placeholder="ఉదాహరణ: ఇంట్లోకి అక్రమంగా ప్రవేశించి దొంగతనానికి పాల్పడ్డారు..."
     )
@@ -41,9 +55,11 @@ with tab2:
                 reader = PdfReader(uploaded_file)
                 extracted_text = ""
                 for page in reader.pages:
-                    extracted_text += page.extract_text() or ""
+                    text = page.extract_text()
+                    if text:
+                        extracted_text += text + "\n"
                 case_text = extracted_text
-                st.success(f"✅ PDF ఫైల్ విజయవంతంగా చదవబడింది: {uploaded_file.name}")
+                st.success(f"✅ PDF ఫైల్ లోడ్ అయింది: {uploaded_file.name}")
             except Exception as pdf_err:
                 st.error(f"PDF చదవడంలో లోపం: {pdf_err}")
         elif uploaded_file.type == "text/plain":
@@ -76,13 +92,12 @@ if st.button("కేస్ విశ్లేషించండి (Analyze)", t
     elif not api_key:
         st.error("Groq API Key కాన్ఫిగర్ చేయబడలేదు. దయచేసి ఎడమవైపు సైడ్‌బార్‌లో Key ఇవ్వండి.")
     else:
-        with st.spinner("Groq ద్వారా వేగంగా చట్టాలను పరిశీలిస్తోంది..."):
+        with st.spinner(f"Groq ({selected_model}) ద్వారా చట్టాలను పరిశీలిస్తోంది..."):
             try:
                 client = Groq(api_key=api_key)
 
-                # ఖచ్చితమైన మరియు స్థిరమైన మోడల్
                 response = client.chat.completions.create(
-                    model="llama3-8b-8192",
+                    model=selected_model,
                     temperature=0.0,
                     messages=[
                         {"role": "system", "content": legal_system_instruction},
