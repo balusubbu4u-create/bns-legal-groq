@@ -82,7 +82,7 @@ if st.button("కేస్ విశ్లేషించండి (Analyze)", t
 
                 # ఖచ్చితమైన మరియు స్థిరమైన మోడల్
                 response = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
+                    model="llama3-8b-8192",
                     temperature=0.0,
                     messages=[
                         {"role": "system", "content": legal_system_instruction},
