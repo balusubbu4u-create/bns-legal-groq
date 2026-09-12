@@ -80,16 +80,9 @@ if st.button("కేస్ విశ్లేషించండి (Analyze)", t
             try:
                 client = Groq(api_key=api_key)
 
-                # 100% పనిచేసే సరికొత్త మరియు స్థిరమైన మోడల్
+                # ఖచ్చితమైన మరియు స్థిరమైన మోడల్
                 response = client.chat.completions.create(
-                    model="response = client.chat.completions.create(
                     model="llama-3.1-8b-instant",
-                    temperature=0.0,
-                    messages=[
-                        {"role": "system", "content": legal_system_instruction},
-                        {"role": "user", "content": f"కేసు వివరాలు:\n{case_text}"}
-                    ]
-                )",
                     temperature=0.0,
                     messages=[
                         {"role": "system", "content": legal_system_instruction},
