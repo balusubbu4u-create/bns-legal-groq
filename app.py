@@ -45,7 +45,7 @@ with tab2:
                 case_text = extracted_text
                 st.success(f"✅ PDF ఫైల్ విజయవంతంగా చదవబడింది: {uploaded_file.name}")
             except Exception as pdf_err:
-                st.error(تانో PDF చదవడంలో లోపం: {pdf_err})
+                st.error(f"PDF చదవడంలో లోపం: {pdf_err}")
         elif uploaded_file.type == "text/plain":
             case_text = uploaded_file.getvalue().decode("utf-8")
             st.success(f"✅ Text ఫైల్ లోడ్ అయింది: {uploaded_file.name}")
