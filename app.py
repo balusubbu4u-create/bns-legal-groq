@@ -18,6 +18,19 @@ if "GROQ_API_KEY" not in st.secrets:
 
 api_key = st.secrets["GROQ_API_KEY"]
 
+# సైడ్‌బార్‌లో మోడల్ వెర్షన్ల ఎంపిక
+st.sidebar.header("⚙️ సెట్టింగ్స్ & వెర్షన్లు")
+available_models = [
+    "llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile",
+    "gemma2-9b-it"
+]
+selected_model = st.sidebar.selectbox(
+    "AI Model వెర్షన్ ఎంచుకోండి:",
+    options=available_models,
+    index=0
+)
+
 tab1, tab2 = st.tabs(["📝 టెక్స్ట్ వివరాలు", "📁 PDF / Text ఫైల్ అప్‌లోడ్"])
 
 case_text = ""
@@ -53,20 +66,21 @@ with tab2:
             case_text = uploaded_file.getvalue().decode("utf-8")
             st.success(f"✅ Text ఫైల్ లోడ్ అయింది: {uploaded_file.name}")
 
-# కొత్త మరియు పాత చట్టాల పోలికతో కూడిన ప్రాంప్ట్
+# కొత్త మరియు పాత చట్టాల పోలికతో పాటు దర్యాప్తు విధానాల కోసం విస్తృతమైన ప్రాంప్ట్
 legal_system_instruction = """
 మీరు భారతీయ క్రిమినల్ చట్టాలు (Bharatiya Nyaya Sanhita - BNS, Bharatiya Nagarik Suraksha Sanhita - BNSS, Bharatiya Sakshya Adhiniyam - BSA) మరియు వాటి పాత చట్టాలైన IPC, CrPC, Indian Evidence Act (IEA) లపై పూర్తి అవగాహన ఉన్న అధికారిక లీగల్ అసిస్టెంట్.
 
 ముఖ్య మార్గదర్శకాలు:
 1. ప్రతి సెక్షన్‌ను సూచించేటప్పుడు, కొత్త చట్టం (BNS/BNSS/BSA) తో పాటు దాని పాత రూపం (IPC/CrPC/IEA) పక్కపక్కనే (ఉదాహరణకు: BNS Section 303 / పాత IPC Section 379) స్పష్టంగా పేర్కొనాలి.
-2. విశ్లేషణ స్పష్టమైన తెలుగులో, సంక్షిప్తంగా మరియు ఖచ్చితంగా ఉండాలి.
+2. దర్యాప్తు విధానాలు (Investigation Procedures), ఎఫ్‌ఐఆర్ నమోదు, సెర్చ్ & సీజర్, అరెస్ట్ నిబంధనలు మరియు కాలపరిమితులు (Timelines) చాలా స్పష్టంగా మరియు విస్తృతంగా రాయాలి.
+3. విశ్లేషణ స్పష్టమైన తెలుగులో ఉండాలి.
 
 క్రింది క్రమం (Headings) లో నివేదిక రూపొందించండి:
-1. వర్తించే Sections & Punishments (కొత్త BNS మరియు పాత IPC సెక్షన్ల పోలికతో)
+1. వర్తించే Sections & Punishments (కొత్త BNS మరియు పాత IPC సెక్షన్ల పోలికతో శిక్షలు)
 2. నేరం యొక్క వర్గీకరణ (Cognizable/Non-Cognizable, Bailable/Non-Bailable)
-3. Procedures & Timelines (కొత్త BNSS మరియు పాత CrPC నిబంధనలు)
+3. Procedures & Timelines (కొత్త BNSS మరియు పాత CrPC నిబంధనలు: ఎఫ్ఐఆర్ నమోదు, దర్యాప్తు పద్ధతులు, కాలపరిమితులు)
 4. Evidence Guidelines (కొత్త BSA మరియు పాత IEA మార్గదర్శకాలు)
-5. IO Action Checklist
+5. IO Action Checklist (దర్యాప్తు అధికారి చేయవలసిన పనులు)
 
 చివరలో తప్పనిసరిగా:
 "గమనిక: ఇది ప్రాథమిక సమాచారం మరియు దర్యాప్తు మార్గదర్శకత్వం కోసం మాత్రమే; తుది చట్టపరమైన నిర్ణయాల కోసం న్యాయ నిపుణులను సంప్రదించాలి." అని రాయండి.
@@ -76,34 +90,14 @@ if st.button("కేస్ విశ్లేషించండి (Analyze)", t
     if not case_text.strip():
         st.warning("దయచేసి ఫిర్యాదు వివరాలను నమోదు చేయండి లేదా ఫైల్ అప్‌లోడ్ చేయండి.")
     else:
-        # మెసేజ్ లెంగ్త్ ఎర్రర్ రాకుండా టెక్స్ట్ పరిమాణాన్ని కంట్రోల్ చేయడం (గరిష్టంగా 3000 క్యారెక్టర్లు)
         trimmed_case_text = case_text[:3000]
 
         with st.spinner("చట్టాల ప్రకారం విశ్లేషిస్తోంది..."):
             try:
                 client = Groq(api_key=api_key)
 
-                models_data = client.models.list().data
-                all_ids = [m.id for m in models_data]
-
-                preferred_order = [
-                    "llama-3.1-8b-instant",
-                    "llama-3.3-70b-versatile",
-                    "meta-llama/llama-guard-3-8b"
-                ]
-
-                chosen_model = None
-                for pref in preferred_order:
-                    if pref in all_ids:
-                        chosen_model = pref
-                        break
-
-                if not chosen_model:
-                    llama_filtered = [m for m in all_ids if "llama" in m.lower() and "guard" not in m.lower()]
-                    chosen_model = llama_filtered[0] if llama_filtered else all_ids[0]
-
                 response = client.chat.completions.create(
-                    model=chosen_model,
+                    model=selected_model,
                     temperature=0.0,
                     max_tokens=512,
                     messages=[
