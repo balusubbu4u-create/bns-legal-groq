@@ -46,7 +46,7 @@ with tab2:
                     if text:
                         extracted_text += text + "\n"
                 case_text = extracted_text
-                st.success(f"✅ PDF ఫైల్ లోడ్ అయింది: {uploaded_file.name}")
+                st.success(f"✅ PDF ఫైల్ విజయవంతంగా లోడ్ అయింది: {uploaded_file.name}")
             except Exception as pdf_err:
                 st.error(f"PDF చదవడంలో లోపం: {pdf_err}")
         elif uploaded_file.type == "text/plain":
@@ -80,11 +80,9 @@ if st.button("కేస్ విశ్లేషించండి (Analyze)", t
             try:
                 client = Groq(api_key=api_key)
 
-                # మీ ఖాతాలో ఉన్న మోడల్స్ లిస్ట్ పొందడం
                 models_data = client.models.list().data
                 all_ids = [m.id for m in models_data]
 
-                # అధిక లిమిట్ ఉండే Llama మోడల్స్‌కు మొదటి ప్రాధాన్యత (Qwen రేట్ లిమిట్ సమస్య రాకుండా)
                 preferred_order = [
                     "llama-3.1-8b-instant",
                     "llama-3.3-70b-versatile",
@@ -97,16 +95,15 @@ if st.button("కేస్ విశ్లేషించండి (Analyze)", t
                         chosen_model = pref
                         break
 
-                # ఒకవేళ లిస్ట్‌లో పైన పేర్కొన్నవి లేకపోతే, 'llama' ఉన్న మొదటి మోడల్
                 if not chosen_model:
                     llama_filtered = [m for m in all_ids if "llama" in m.lower() and "guard" not in m.lower()]
                     chosen_model = llama_filtered[0] if llama_filtered else all_ids[0]
 
-                # max_tokens పరిమితి పెట్టడం వల్ల 429 Token limit ఎర్రర్ రాదు
+                # max_tokens పరిమితి 512కి సెట్ చేయబడింది
                 response = client.chat.completions.create(
                     model=chosen_model,
                     temperature=0.0,
-                    max_tokens=1024,
+                    max_tokens=512,
                     messages=[
                         {"role": "system", "content": legal_system_instruction},
                         {"role": "user", "content": f"ఫిర్యాదు వివరాలు:\n{case_text}"}
