@@ -82,7 +82,9 @@ if st.button("కేస్ విశ్లేషించండి (Analyze)", t
 
                 # Groq యొక్క అత్యంత స్థిరమైన మరియు శక్తివంతమైన మోడల్
                 response = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
+                    model="llama-3.1-8b-instant", # సరికొత్త మరియు స్థిరమైన మోడల్
+                    temperature=0.0,
+                    ...
                     temperature=0.0,
                     messages=[
                         {"role": "system", "content": legal_system_instruction},
