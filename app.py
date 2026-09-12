@@ -76,6 +76,9 @@ if st.button("కేస్ విశ్లేషించండి (Analyze)", t
     if not case_text.strip():
         st.warning("దయచేసి ఫిర్యాదు వివరాలను నమోదు చేయండి లేదా ఫైల్ అప్‌లోడ్ చేయండి.")
     else:
+        # మెసేజ్ లెంగ్త్ ఎర్రర్ రాకుండా టెక్స్ట్ పరిమాణాన్ని కంట్రోల్ చేయడం (గరిష్టంగా 3000 క్యారెక్టర్లు)
+        trimmed_case_text = case_text[:3000]
+
         with st.spinner("చట్టాల ప్రకారం విశ్లేషిస్తోంది..."):
             try:
                 client = Groq(api_key=api_key)
@@ -99,14 +102,13 @@ if st.button("కేస్ విశ్లేషించండి (Analyze)", t
                     llama_filtered = [m for m in all_ids if "llama" in m.lower() and "guard" not in m.lower()]
                     chosen_model = llama_filtered[0] if llama_filtered else all_ids[0]
 
-                # max_tokens పరిమితి 512కి సెట్ చేయబడింది
                 response = client.chat.completions.create(
                     model=chosen_model,
                     temperature=0.0,
                     max_tokens=512,
                     messages=[
                         {"role": "system", "content": legal_system_instruction},
-                        {"role": "user", "content": f"ఫిర్యాదు వివరాలు:\n{case_text}"}
+                        {"role": "user", "content": f"ఫిర్యాదు వివరాలు:\n{trimmed_case_text}"}
                     ]
                 )
 
