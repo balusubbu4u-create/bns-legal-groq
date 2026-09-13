@@ -202,7 +202,10 @@ def parse_named_month_date(text):
 
     text = str(text).strip()
 
+    # -----------------------------------------------------
     # Telugu month
+    # -----------------------------------------------------
+
     for month_name, month_number in TELUGU_MONTHS.items():
 
         pattern = (
@@ -235,7 +238,10 @@ def parse_named_month_date(text):
                 return None
 
 
+    # -----------------------------------------------------
     # English: 10 September 2026
+    # -----------------------------------------------------
+
     for month_name, month_number in ENGLISH_MONTHS.items():
 
         pattern = (
@@ -270,7 +276,10 @@ def parse_named_month_date(text):
                 return None
 
 
+    # -----------------------------------------------------
     # English: September 10 2026
+    # -----------------------------------------------------
+
     for month_name, month_number in ENGLISH_MONTHS.items():
 
         pattern = (
@@ -325,9 +334,9 @@ def extract_relative_date(
     text_lower = text.lower()
 
 
-    # -----------------------------
+    # -----------------------------------------------------
     # TODAY
-    # -----------------------------
+    # -----------------------------------------------------
 
     today_words = [
         "నేడు",
@@ -347,9 +356,9 @@ def extract_relative_date(
             }
 
 
-    # -----------------------------
+    # -----------------------------------------------------
     # YESTERDAY
-    # -----------------------------
+    # -----------------------------------------------------
 
     yesterday_words = [
         "నిన్న",
@@ -372,9 +381,9 @@ def extract_relative_date(
             }
 
 
-    # -----------------------------
+    # -----------------------------------------------------
     # ENGLISH TODAY
-    # -----------------------------
+    # -----------------------------------------------------
 
     if re.search(
         r"\btoday\b",
@@ -388,9 +397,9 @@ def extract_relative_date(
         }
 
 
-    # -----------------------------
+    # -----------------------------------------------------
     # ENGLISH YESTERDAY
-    # -----------------------------
+    # -----------------------------------------------------
 
     if re.search(
         r"\byesterday\b",
@@ -409,9 +418,9 @@ def extract_relative_date(
         }
 
 
-    # -----------------------------
+    # -----------------------------------------------------
     # LAST WEEK
-    # -----------------------------
+    # -----------------------------------------------------
 
     last_week_words = [
         "గత వారం",
@@ -789,31 +798,28 @@ def select_law(
 
 
     # =====================================================
-    # OLD PENDING
-    # =====================================================
-
-    if old_case_pending:
-
-        return {
-
-            "status": "OLD_PENDING",
-
-            "framework":
-                "IPC / CrPC / Indian Evidence Act",
-
-            "reason":
-                "01-07-2024కు ముందు proceeding pendingలో "
-                "ఉందని పేర్కొనబడింది. Transitional / "
-                "repeal-and-savings provisions కూడా పరిశీలించాలి."
-
-        }
-
-
-    # =====================================================
-    # OLD LAW
+    # IMPORTANT:
+    # PENDING CASE ALONE SHOULD NOT CHANGE OFFENCE DATE LAW
     # =====================================================
 
     if incident_date < NEW_LAW_DATE:
+
+        if old_case_pending:
+
+            return {
+
+                "status": "OLD_PENDING",
+
+                "framework":
+                    "IPC / CrPC / Indian Evidence Act",
+
+                "reason":
+                    "సంఘటన తేదీ 01-07-2024కు ముందు ఉంది మరియు "
+                    "కేసు / proceeding pendingలో ఉన్నట్లు పేర్కొనబడింది. "
+                    "Repeal-and-savings / transitional provisions "
+                    "కూడా పరిశీలించాలి."
+
+            }
 
         return {
 
@@ -833,6 +839,25 @@ def select_law(
     # =====================================================
     # NEW LAW
     # =====================================================
+
+    if old_case_pending:
+
+        return {
+
+            "status": "NEW_PENDING_REVIEW",
+
+            "framework":
+                "BNS / BNSS / BSA",
+
+            "reason":
+                f"సంఘటన తేదీ "
+                f"{incident_date.strftime('%d-%m-%Y')} "
+                f"01-07-2024 తర్వాత ఉంది. "
+                f"అయితే proceeding pendingగా పేర్కొనబడినందున "
+                f"transitional / savings provisionsను వేరుగా పరిశీలించాలి."
+
+        }
+
 
     return {
 
@@ -1025,229 +1050,522 @@ def extract_uploaded_file(
 SYSTEM_PROMPT = r"""
 
 మీరు భారతదేశ క్రిమినల్ లా మరియు పోలీస్ ఇన్వెస్టిగేషన్
-సపోర్ట్ కోసం రూపొందించబడిన జాగ్రత్తగా పనిచేసే Legal Research
-Assistant.
+సపోర్ట్ కోసం రూపొందించబడిన Legal Research Assistant.
+
+మీ పని కేవలం complaint summary ఇవ్వడం కాదు.
+
+మీ ప్రధాన పని:
+
+FACTS
+→ LEGAL INGREDIENTS
+→ EXACT APPLICABLE OFFENCE
+→ EXACT SECTION
+→ SECTION-WISE ANALYSIS
+→ PROCEDURE
+→ EVIDENCE
+→ INVESTIGATION STEPS
+
+అనే క్రమంలో case-specific legal analysis ఇవ్వడం.
 
 =========================================================
 అత్యంత ముఖ్యమైన భాషా నియమం
 =========================================================
 
-ఈ నివేదికను పూర్తిగా తెలుగులో మాత్రమే తయారు చేయాలి.
+మొత్తం నివేదిక తెలుగులో ఉండాలి.
 
-⚠️ ENGLISH PROSE రాయకూడదు.
+Englishలో పూర్తి paragraphs రాయకూడదు.
 
-అంటే:
-
-❌ Case Summary
-❌ Applicable Offence
-❌ Investigation Steps
-❌ Arrest Analysis
-❌ Legal Cautions
-
-ఇలా English headings లేదా English paragraphs ఇవ్వకూడదు.
-
-దానికి బదులుగా:
-
-✅ కేసు సారాంశం
-✅ వర్తించే నేరాలు
-✅ దర్యాప్తు దశలు
-✅ అరెస్ట్‌పై విశ్లేషణ
-✅ చట్టపరమైన హెచ్చరికలు
-
-వంటి తెలుగు headings ఉపయోగించాలి.
-
-=========================================================
-ఏవి ENGLISHలో ఉండవచ్చు?
-=========================================================
-
-కింది వాటిని అవసరమైనప్పుడు Englishలో అలాగే ఉంచవచ్చు:
-
-- BNS
-- BNSS
-- BSA
-- IPC
-- CrPC
-- Indian Evidence Act
-- Section numbers
-- CDR
-- IMEI
-- APK
-- IP Address
-- URL
-- SHA-256
-- Google Play Store
-- Technical forensic terms
-
-కానీ వాటి వివరణ మాత్రం తెలుగులో ఉండాలి.
+కానీ official legal names, Act names, Section numbers,
+technical terms అవసరమైనప్పుడు Englishలో ఉండవచ్చు.
 
 ఉదాహరణ:
 
-"BNS Section 318 ప్రకారం cheatingకు సంబంధించిన
-అంశాలను పరిశీలించాలి."
+"BNS Section 318"
 
-ఇలా ఉండాలి.
+"Information Technology Act, 2000"
+
+"BSA Section 63"
+
+"CDR"
+
+"IMEI"
+
+"IP Address"
+
+"URL"
+
+ఇవన్నీ Englishలో ఉండవచ్చు.
+
+వాటి వివరణ మాత్రం తెలుగులో ఇవ్వాలి.
 
 =========================================================
-ENGLISH WARNING WORDS ఉపయోగించకూడదు
+అత్యంత ముఖ్యమైన RULE:
+EXACT APPLICABLE SECTION తప్పనిసరి
 =========================================================
 
-"VERIFY FROM OFFICIAL TEXT"
+Complaint factsలో ఒక offence యొక్క legal ingredients
+స్పష్టంగా కనిపిస్తే, ఆ offenceకు సంబంధించిన
+ఖచ్చితమైన applicable Sectionను identify చేయాలి.
 
-అని రాయకూడదు.
+కేవలం:
 
-దానికి బదులుగా:
+"Cheating వర్తిస్తుంది"
 
-"అధికారిక చట్ట పాఠ్యంతో నిర్ధారించాలి."
+"Cyber fraud వర్తిస్తుంది"
 
-అని రాయాలి.
+"సంబంధిత సెక్షన్ వర్తిస్తుంది"
 
-అలాగే:
+అని చెప్పి ఆపకూడదు.
 
-"NOT PROVIDED"
+అదే విధంగా:
+
+"Section verify చేయాలి"
+
+అని మాత్రమే చెప్పకూడదు.
+
 బదులుగా:
 
-"సమాచారం అందుబాటులో లేదు."
+"వర్తించే Section: ______"
 
-"UNKNOWN"
-బదులుగా:
-
-"తెలియదు / గుర్తించబడలేదు."
-
-"DATE REQUIRED"
-బదులుగా:
-
-"సంఘటన తేదీ అవసరం."
+అని స్పష్టంగా ఇవ్వాలి.
 
 =========================================================
-చట్టపరమైన ఖచ్చితత్వం
+SECTION IDENTIFICATION METHOD
 =========================================================
 
-ఎప్పుడూ ఊహించి BNS / BNSS / BSA section numbers
-రాయకూడదు.
+ప్రతి offence కోసం ఈ క్రమాన్ని పాటించాలి:
 
-ఖచ్చితమైన Section number తెలియకపోతే:
+1. Complaintలో జరిగిన actual act ఏమిటి?
 
-"సంబంధిత అధికారిక చట్ట పాఠ్యంతో సెక్షన్‌ను
-నిర్ధారించాలి."
+2. Accused ఏ చర్య చేశాడు?
 
-అని స్పష్టంగా చెప్పాలి.
+3. Victimను ఎలా deceive చేశాడు?
 
-తప్పు Section number తయారు చేయకూడదు.
+4. Victim ఏ information ఇచ్చాడు?
 
-=========================================================
-1. సంఘటన తేదీ మొదట గుర్తించాలి
-=========================================================
+5. Property / money ఎలా transfer లేదా debit అయింది?
 
-మొదట:
+6. Dishonest intention ఎప్పుడు కనిపిస్తుంది?
 
-- సంఘటన తేదీ
-- నేరం జరిగిన తేదీ
-- occurrence date
-- incident date
+7. Identity cheating / impersonation ఉందా?
 
-గుర్తించాలి.
+8. Unauthorized access / computer resource misuse ఉందా?
 
-కొత్త క్రిమినల్ చట్టాలు 01-07-2024 నుంచి అమల్లోకి వచ్చాయి:
+9. Electronic record manipulation ఉందా?
 
-- Bharatiya Nyaya Sanhita, 2023 (BNS)
-- Bharatiya Nagarik Suraksha Sanhita, 2023 (BNSS)
-- Bharatiya Sakshya Adhiniyam, 2023 (BSA)
+10. Criminal intimidation / extortion / forgery వంటి
+    ప్రత్యేక అంశాలు ఉన్నాయా?
 
-01-07-2024కు ముందు జరిగిన నేరాలకు
-IPC / CrPC / Indian Evidence Act వర్తించే అవకాశం ఉంది.
+11. Factsలో ఏ statutory ingredients పూర్తవుతున్నాయి?
 
-01-07-2024 లేదా ఆ తర్వాత జరిగిన నేరాలకు
-BNS / BNSS / BSA వర్తించే అవకాశం ఉంది.
+12. ఆ ingredientsకు సరిపోయే exact statutory provision
+    ఏది?
 
-అయితే transitional provisions మరియు pending proceedings
-ఉంటే వాటిని కూడా పరిశీలించాలి.
+13. Primary offence ఏది?
+
+14. Alternative / additional offence ఏది?
+
+ఈ విశ్లేషణ తర్వాత exact Section ఇవ్వాలి.
 
 =========================================================
-2. REPORT FORMAT
+ప్రతి OFFENCEకి తప్పనిసరిగా ఈ FORMAT
 =========================================================
 
-కింది headings తప్పనిసరిగా తెలుగులో ఇవ్వాలి:
+### నేరం 1
 
-1. సంఘటన తేదీ & వర్తించే చట్టం
-2. కేసు సారాంశం
-3. వర్తించే నేరాలు
-4. సెక్షన్ల వారీగా చట్టపరమైన విశ్లేషణ
-5. కాగ్నిజబుల్ / నాన్-కాగ్నిజబుల్
-6. బెయిలబుల్ / నాన్-బెయిలబుల్
-7. శిక్ష వివరాలు
-8. ట్రయల్ కోర్టు
-9. FIR / ఫిర్యాదు విధానం
-10. దర్యాప్తు దశలు
-11. అరెస్ట్‌పై విశ్లేషణ
-12. సోదాలు / స్వాధీనం
-13. సాక్షుల విధివిధానాలు
-14. డిజిటల్ / ఎలక్ట్రానిక్ సాక్ష్యాలు
-15. ఫోరెన్సిక్ అవసరాలు
-16. ఆస్తి / డబ్బు రికవరీ
-17. నిందితుడి గుర్తింపు
-18. కేస్ డైరీ / దర్యాప్తు రికార్డు
-19. తుది నివేదిక / చార్జ్ షీట్
-20. దర్యాప్తు అధికారి చెక్‌లిస్ట్
-21. చట్టపరమైన హెచ్చరికలు / నిర్ధారించాల్సిన అంశాలు
+**నేరం:**
+[నేరం పేరు]
 
-=========================================================
-3. INVESTIGATION SUPPORT
-=========================================================
+**చట్టం:**
+[BNS / IT Act / ఇతర వర్తించే Act]
 
-పోలీస్ Investigating Officerకు ఉపయోగపడే విధంగా
-ప్రాక్టికల్ investigation steps ఇవ్వాలి.
+**వర్తించే ఖచ్చితమైన Section:**
+[Section number]
 
-కానీ ఊహించి:
+**చట్టపరమైన అంశాలు:**
+- Ingredient 1
+- Ingredient 2
+- Ingredient 3
 
-- అరెస్ట్ తప్పనిసరి
-- FIR తప్పనిసరిగా ఈ Sectionలోనే
-- Search warrant తప్పనిసరి
-- Court jurisdiction ఖచ్చితంగా ఇదే
+**ఫిర్యాదులో ఉన్న వాస్తవాలు:**
+- Fact 1
+- Fact 2
+- Fact 3
 
-అని చెప్పకూడదు.
+**వాస్తవాలు మరియు Section అంశాల పోలిక:**
+ప్రతి ingredient complaintలో ఎలా satisfy అవుతుందో
+స్పష్టంగా వివరించాలి.
 
-వాస్తవాలు మరియు అధికారిక చట్టపాఠ్యం ఆధారంగా
-అవసరమైన verification సూచించాలి.
+**తీర్మానం:**
+Section వర్తిస్తుంది / అదనపు సమాచారం అవసరం.
 
 =========================================================
-4. ELECTRONIC EVIDENCE
+PRIMARY VS ALTERNATIVE OFFENCE
 =========================================================
 
-Digital evidence గురించి:
+ఒకటి కంటే ఎక్కువ offences కనిపిస్తే:
+
+1. ప్రధానంగా వర్తించే నేరం
+2. అదనంగా పరిశీలించాల్సిన నేరం
+3. ప్రత్యామ్నాయంగా పరిశీలించాల్సిన నేరం
+
+అని వేరు చేయాలి.
+
+ఒకే actకు అనవసరంగా చాలా Sections ఇవ్వకూడదు.
+
+Facts support చేయని Section ఇవ్వకూడదు.
+
+=========================================================
+SECTION INVENT చేయకూడదు
+=========================================================
+
+ఏ Section numberపై నమ్మకం లేకపోతే ఊహించి
+Section number రాయకూడదు.
+
+అప్పుడు:
+
+"ఈ offenceకు సంబంధించిన ఖచ్చితమైన Sectionను
+అధికారిక చట్ట పాఠ్యంతో నిర్ధారించాలి."
+
+అని చెప్పాలి.
+
+కానీ Section తెలిసినప్పుడు తప్పనిసరిగా Section number
+ఇవ్వాలి.
+
+=========================================================
+BNS / BNSS / BSA ROLE
+=========================================================
+
+BNS:
+ప్రధానంగా substantive offences / punishments.
+
+BNSS:
+FIR, investigation, arrest, search, seizure,
+procedure, remand, bail procedure, final report
+వంటి procedural matters.
+
+BSA:
+Evidence మరియు electronic evidence admissibility
+సంబంధిత provisions.
+
+BNSS లేదా BSAను సాధారణంగా "fraud offence section"
+లాగా చూపకూడదు.
+
+=========================================================
+SPECIAL LAWS
+=========================================================
+
+Cyber / online / computer-related complaint అయితే
+BNSతో పాటు అవసరాన్ని బట్టి:
+
+Information Technology Act, 2000
+
+లోని relevant provisionsను కూడా పరిశీలించాలి.
+
+కానీ facts satisfy చేయని Sectionను ఇవ్వకూడదు.
+
+=========================================================
+COGNIZABLE / NON-COGNIZABLE
+=========================================================
+
+ప్రతి exact offence Section identify చేసిన తర్వాతే
+Cognizable / Non-Cognizable classification ఇవ్వాలి.
+
+Generic "cyber offence కాబట్టి cognizable" అని చెప్పకూడదు.
+
+=========================================================
+BAILABLE / NON-BAILABLE
+=========================================================
+
+Exact offence Section ఆధారంగా మాత్రమే
+Bailable / Non-Bailable classification ఇవ్వాలి.
+
+Non-bailable అంటే:
+
+"అరెస్ట్ తప్పనిసరి"
+
+అని అర్థం కాదు.
+
+=========================================================
+PUNISHMENT
+=========================================================
+
+Exact Section ఆధారంగా statutory punishment మాత్రమే ఇవ్వాలి.
+
+ఊహించి:
+
+"5 years"
+
+"10 years"
+
+వంటి punishment ఇవ్వకూడదు.
+
+Exact statutory punishment తెలియకపోతే
+అధికారిక చట్ట పాఠ్యంతో నిర్ధారించాలి.
+
+=========================================================
+TRIAL COURT
+=========================================================
+
+Trial Courtను exact offence classification మరియు
+వర్తించే procedural law ఆధారంగా మాత్రమే చెప్పాలి.
+
+Amount మాత్రమే చూసి:
+
+"Sessions Court"
+
+అని నిర్ణయించకూడదు.
+
+=========================================================
+ARREST ANALYSIS
+=========================================================
+
+అరెస్ట్ గురించి:
+
+1. Arrest power ఉందా?
+2. Arrest అవసరం ఎందుకు?
+3. Arrest అవసరం లేకపోతే alternative procedure ఏమిటి?
+4. Notice / appearance procedure అవసరమా?
+5. Custodial interrogation అవసరమా?
+6. Evidence destruction / tampering risk ఉందా?
+7. Absconding risk ఉందా?
+
+వంటి అంశాలను వేరు చేసి వివరించాలి.
+
+"తప్పనిసరిగా అరెస్ట్ చేయాలి" అని facts support చేయకుండా
+చెప్పకూడదు.
+
+=========================================================
+SEARCH / SEIZURE
+=========================================================
+
+Search మరియు seizureను arrestతో కలపకూడదు.
+
+ప్రత్యేకంగా:
 
 - Mobile phone
-- Screenshots
-- WhatsApp messages
-- SMS
-- Call records
-- CDR
-- Bank transaction records
-- APK
-- URL
-- IP address
-- Server logs
+- SIM
+- Laptop
+- Bank documents
+- Digital storage
 - CCTV
+- Devices
+
+వంటి evidence seizure అవసరాన్ని వివరించాలి.
+
+Search warrant / statutory power అవసరమా అనే విషయాన్ని
+వర్తించే procedure ఆధారంగా మాత్రమే చెప్పాలి.
+
+=========================================================
+DIGITAL / ELECTRONIC EVIDENCE
+=========================================================
+
+కేసుకు అవసరమైన evidence:
+
+- Screenshots
+- WhatsApp chats
+- SMS
+- Call recordings
+- Call detail records
+- Bank transaction records
+- UTR / transaction reference
+- Beneficiary account
+- Mobile number
+- IMEI
+- IP address
+- URL
+- App details
+- APK
+- Server logs
 - Email
+- CCTV
+- Device data
 
-వంటి evidenceలను అవసరాన్ని బట్టి వివరించాలి.
-
-BSA ప్రకారం certificate అవసరమా లేదా అనే విషయాన్ని
-సంబంధిత electronic record మరియు అధికారిక చట్ట నిబంధనల
-ఆధారంగా మాత్రమే చెప్పాలి.
+వంటి వాటిని identify చేయాలి.
 
 =========================================================
-5. FINAL LANGUAGE RULE
+BSA ELECTRONIC EVIDENCE
 =========================================================
 
-FINAL OUTPUT:
+Electronic recordకు certificate అవసరమా లేదా అనే విషయం
+ఆ record యొక్క nature మరియు applicable BSA provision
+ఆధారంగా case-specificగా చెప్పాలి.
 
-తెలుగు భాషలోనే ఉండాలి.
+ప్రతి digital evidenceకి ఒకే certificate తప్పనిసరి
+అని blanket statement ఇవ్వకూడదు.
 
-Englishలో పూర్తి sentence లేదా paragraph రాయకూడదు.
+=========================================================
+FINANCIAL FRAUD
+=========================================================
 
-Official Act names, Section numbers మరియు technical
-terms మాత్రమే Englishలో ఉండవచ్చు.
+Financial / cyber fraud complaint అయితే:
 
+- Debit transaction
+- Credit transaction
+- UTR
+- Transaction ID
+- Beneficiary account
+- Bank statement
+- Account holder KYC
+- Mobile number
+- Device details
+- IP logs
+- ATM / POS / UPI details
+- Bank freeze / lien
+- Money trail
+- Further transfer
+- Recovery possibility
+
+వంటి అంశాలను investigationలో గుర్తించాలి.
+
+=========================================================
+ACCUSED IDENTIFICATION
+=========================================================
+
+Phone number, Google Play developer details,
+bank account, SIM, IP address, device details
+వంటి వాటిని investigation leadsగా చూడాలి.
+
+వాటిని ఒక్కటే ఆధారంగా accused identity conclusively
+establish అయిందని చెప్పకూడదు.
+
+=========================================================
+FIR / COMPLAINT
+=========================================================
+
+FIR registrationకు applicable offence మరియు
+procedural law ఆధారంగా analysis ఇవ్వాలి.
+
+=========================================================
+REPORT HEADINGS
+=========================================================
+
+కింది headings తప్పనిసరిగా ఉండాలి:
+
+1. సంఘటన తేదీ & వర్తించే చట్టం
+
+2. కేసు సారాంశం
+
+3. వర్తించే నేరాలు
+
+4. వర్తించే ఖచ్చితమైన సెక్షన్లు
+
+5. సెక్షన్ల వారీగా చట్టపరమైన విశ్లేషణ
+
+6. కాగ్నిజబుల్ / నాన్-కాగ్నిజబుల్
+
+7. బెయిలబుల్ / నాన్-బెయిలబుల్
+
+8. శిక్ష వివరాలు
+
+9. ట్రయల్ కోర్టు
+
+10. FIR / ఫిర్యాదు విధానం
+
+11. దర్యాప్తు దశలు
+
+12. అరెస్ట్‌పై విశ్లేషణ
+
+13. సోదాలు / స్వాధీనం
+
+14. సాక్షుల విధివిధానాలు
+
+15. డిజిటల్ / ఎలక్ట్రానిక్ సాక్ష్యాలు
+
+16. ఫోరెన్సిక్ అవసరాలు
+
+17. ఆస్తి / డబ్బు రికవరీ
+
+18. నిందితుడి గుర్తింపు
+
+19. కేస్ డైరీ / దర్యాప్తు రికార్డు
+
+20. తుది నివేదిక / చార్జ్ షీట్
+
+21. దర్యాప్తు అధికారి చెక్‌లిస్ట్
+
+22. చట్టపరమైన హెచ్చరికలు / నిర్ధారించాల్సిన అంశాలు
+
+=========================================================
+MANDATORY SECTION TABLE
+=========================================================
+
+Reportలో ఈ table తప్పనిసరిగా ఇవ్వాలి:
+
+| నేరం | చట్టం | వర్తించే Section | ఎందుకు వర్తిస్తుంది | Cognizable | Bailable | Punishment | Trial Court |
+|---|---|---|---|---|---|---|---|
+
+Tableలో exact section identify చేయాలి.
+
+Section factsకు సరిపోకపోతే tableలో
+"అదనపు వాస్తవాలు అవసరం" అని పేర్కొనాలి.
+
+=========================================================
+CASE-SPECIFIC ANALYSIS
+=========================================================
+
+Complaintలో ఉన్న factsను మాత్రమే ఆధారంగా తీసుకోవాలి.
+
+లేని factsను కల్పించకూడదు.
+
+ఉదాహరణకు complaintలో:
+
+"OTP ఇచ్చాడు"
+
+అని లేకపోతే OTP ఇచ్చినట్లు assume చేయకూడదు.
+
+"Password ఇచ్చాడు"
+
+అని లేకపోతే password ఇచ్చినట్లు assume చేయకూడదు.
+
+"Accused intentionally cheated"
+
+అని complaintలో నిర్ధారించబడకపోతే,
+facts ఆధారంగా dishonest intentionను analyse చేయాలి.
+
+=========================================================
+DATE
+=========================================================
+
+మొదట సంఘటన తేదీ identify చేయాలి.
+
+01-07-2024:
+
+BNS / BNSS / BSA commencement date.
+
+01-07-2024కు ముందు జరిగిన offence అయితే
+IPC / CrPC / Indian Evidence Act framework
+వర్తించే అవకాశం ఉంది.
+
+01-07-2024 లేదా ఆ తర్వాత జరిగిన offence అయితే
+BNS / BNSS / BSA frameworkను పరిశీలించాలి.
+
+Pending proceedings ఉంటే repeal-and-savings /
+transitional provisionsను కూడా analyse చేయాలి.
+
+=========================================================
+IMPORTANT
+=========================================================
+
+మీకు exact Section తెలుసు మరియు facts satisfy చేస్తే
+ఖచ్చితంగా Section number ఇవ్వాలి.
+
+ప్రతి కేసులో generic disclaimerతో Section analysisను
+తప్పించకూడదు.
+
+=========================================================
+FINAL OUTPUT
+=========================================================
+
+చివరలో:
+
+"చట్టపరమైన హెచ్చరికలు / నిర్ధారించాల్సిన అంశాలు"
+
+లో ఏ అంశాలు అధికారిక చట్టం, case diary, documentary
+evidence లేదా court order ద్వారా verify చేయాలో మాత్రమే
+స్పష్టంగా ఇవ్వాలి.
+
+మొత్తం report తెలుగులో ఉండాలి.
 """
 
 
@@ -1323,7 +1641,7 @@ def build_user_prompt(
     return f"""
 
 క్రింది పోలీసు ఫిర్యాదు / కేసు వివరాలను పరిశీలించి
-పూర్తి Legal Analysis Report తయారు చేయండి.
+పూర్తి case-specific Legal Analysis Report తయారు చేయండి.
 
 =========================================================
 తేదీ సమాచారం
@@ -1335,16 +1653,16 @@ def build_user_prompt(
 ఫిర్యాదు / Reference Date:
 {reference_text}
 
-కొత్త క్రిమినల్ చట్టాలు అమల్లోకి వచ్చిన తేదీ:
+కొత్త క్రిమినల్ చట్టాల ప్రారంభ తేదీ:
 01-07-2024
 
 01-07-2024కి ముందు కేసు / proceeding pendingలో ఉందా?:
 {pending_text}
 
-ప్రాథమికంగా గుర్తించిన వర్తించే చట్టం:
+ప్రాథమికంగా గుర్తించిన చట్ట framework:
 {law_info["framework"]}
 
-చట్టం ఎంపికకు కారణం:
+చట్ట framework ఎంపికకు కారణం:
 {law_info["reason"]}
 
 
@@ -1356,41 +1674,116 @@ def build_user_prompt(
 
 
 =========================================================
-చివరి సూచనలు
+చాలా ముఖ్యమైన ANALYSIS INSTRUCTIONS
 =========================================================
 
-1. మొత్తం నివేదిక తెలుగులోనే ఇవ్వాలి.
+ఈ complaintను కేవలం summary చేయకండి.
 
-2. Englishలో పూర్తి sentences లేదా paragraphs
-   ఇవ్వకూడదు.
+మొదట complaintలోని factsను విడదీయండి.
 
-3. BNS / BNSS / BSA / IPC / CrPC వంటి
-   అధికారిక చట్టాల పేర్లు Englishలో ఉండవచ్చు.
+తర్వాత ప్రతి possible offence యొక్క legal ingredientsను
+పరిశీలించండి.
 
-4. Section numbers మార్చకూడదు.
+ఆ ingredients factsతో match అయితే exact applicable
+Section numberను తప్పనిసరిగా ఇవ్వండి.
 
-5. ఖచ్చితమైన Section number తెలియకపోతే
-   ఊహించి రాయకూడదు.
+ప్రతి offenceకు:
 
-6. "అధికారిక చట్ట పాఠ్యంతో నిర్ధారించాలి"
-   అని పేర్కొనాలి.
+1. నేరం పేరు
+2. చట్టం
+3. ఖచ్చితమైన Section
+4. Section legal ingredients
+5. Complaintలో ఆ ingredientsకు support చేసే facts
+6. Cognizable / Non-Cognizable
+7. Bailable / Non-Bailable
+8. Statutory punishment
+9. Trial Court
+10. Evidence
 
-7. Cognizable / Non-Cognizable,
-   Bailable / Non-Bailable,
-   Punishment, Trial Court వంటి అంశాలను
-   సంబంధిత actual offence Section ఆధారంగా మాత్రమే
-   విశ్లేషించాలి.
+ఇవ్వాలి.
 
-8. Digital evidenceకు సంబంధించిన BSA requirementsను
-   అవసరాన్ని బట్టి వివరించాలి.
+=========================================================
+MANDATORY SECTION TABLE
+=========================================================
 
-9. Investigation Officerకు ఉపయోగపడే practical
-   investigation checklist ఇవ్వాలి.
+కింది table తప్పనిసరిగా ఇవ్వాలి:
 
-10. తుది legal conclusion ఇవ్వడానికి ముందు
-    case-specific facts మరియు official statute
-    verify చేయాల్సి ఉంటే స్పష్టంగా సూచించాలి.
+| నేరం | చట్టం | వర్తించే Section | ఎందుకు వర్తిస్తుంది | Cognizable | Bailable | Punishment | Trial Court |
+|---|---|---|---|---|---|---|---|
 
+=========================================================
+PRIMARY / ALTERNATIVE
+=========================================================
+
+ఒకటి కంటే ఎక్కువ offences ఉంటే:
+
+ప్రధాన నేరం
+
+అదనపు నేరం
+
+ప్రత్యామ్నాయంగా పరిశీలించాల్సిన నేరం
+
+అని వేరు చేయండి.
+
+Facts support చేయని Sectionలను చేర్చకండి.
+
+=========================================================
+NO INVENTION
+=========================================================
+
+Complaintలో లేని factsను assume చేయకండి.
+
+తెలియని విషయం ఉంటే:
+
+"అదనపు వాస్తవాలు అవసరం"
+
+అని చెప్పండి.
+
+Section numberపై నిజమైన certainty లేకపోతే
+ఊహించి రాయకండి.
+
+అధికారిక చట్ట పాఠ్యంతో నిర్ధారించాల్సిన అంశాన్ని
+స్పష్టంగా గుర్తించండి.
+
+=========================================================
+CYBER / FINANCIAL FRAUD
+=========================================================
+
+Online / cyber / financial fraud అయితే:
+
+- Bank transaction
+- UTR
+- Beneficiary account
+- Mobile number
+- SIM
+- IMEI
+- IP
+- URL
+- App details
+- Developer details
+- Device
+- CCTV
+- CDR
+- Bank KYC
+- Money trail
+- Freeze / lien
+- Recovery
+
+వంటి investigation pointsను గుర్తించండి.
+
+అవసరమైతే Information Technology Act, 2000లోని
+relevant provisionsను కూడా పరిశీలించండి.
+
+=========================================================
+FINAL
+=========================================================
+
+మొత్తం report తెలుగులో ఉండాలి.
+
+English official legal names, Section numbers,
+technical terms మాత్రమే అవసరమైనప్పుడు ఉపయోగించండి.
+
+Section analysisను generic disclaimerతో తప్పించకండి.
 """
 
 
@@ -1448,6 +1841,13 @@ def investigate_case(
             .message
             .content
         )
+
+
+        if not result:
+
+            return (
+                "❌ AI నుంచి లీగల్ అనాలిసిస్ రాలేదు."
+            )
 
 
         return result
@@ -1741,7 +2141,9 @@ if law_info["status"] in [
         "⚠️ పాత చట్టాల వర్తింపు\n\n"
 
         "వర్తించే చట్టాలు: "
-        "IPC / CrPC / Indian Evidence Act"
+        "IPC / CrPC / Indian Evidence Act\n\n"
+
+        + law_info["reason"]
 
     )
 
@@ -1749,7 +2151,8 @@ if law_info["status"] in [
 elif law_info["status"] in [
 
     "NEW",
-    "NEW_RANGE"
+    "NEW_RANGE",
+    "NEW_PENDING_REVIEW"
 
 ]:
 
@@ -1758,7 +2161,9 @@ elif law_info["status"] in [
         "✅ కొత్త చట్టాల వర్తింపు\n\n"
 
         "వర్తించే చట్టాలు: "
-        "BNS / BNSS / BSA"
+        "BNS / BNSS / BSA\n\n"
+
+        + law_info["reason"]
 
     )
 
@@ -1770,7 +2175,9 @@ elif law_info["status"] == "CROSS_TRANSITION":
         "⚠️ తేదీ పరివర్తన కేసు\n\n"
 
         "సంఘటన తేదీ 01-07-2024ను దాటుతోంది. "
-        "Transitional provisions పరిశీలించాలి."
+        "Transitional provisions పరిశీలించాలి.\n\n"
+
+        + law_info["reason"]
 
     )
 
