@@ -582,4 +582,4 @@ st.caption(
     "⚖️ Police Legal & Investigation Assistant | "
     "BNS | BNSS | BSA"
 )
-```
+
