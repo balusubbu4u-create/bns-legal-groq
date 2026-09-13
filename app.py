@@ -42,14 +42,18 @@ client = Groq(api_key=api_key)
 st.sidebar.header("⚙️ AI Model")
 
 # Text + image analysis కోసం current vision-capable model
-DEFAULT_MODEL = "qwen/qwen3.6-27b"
+# =========================================================
+# MODEL SETTINGS
+# =========================================================
 
+st.sidebar.header("⚙️ AI Model")
+
+# Qwen model ప్రస్తుతం పనిచేస్తున్నందున దీనినే ఉపయోగిస్తున్నాం
 selected_model = "qwen/qwen3.6-27b"
 
 st.sidebar.success(
     f"✅ Active Model: {selected_model}"
 )
-    index=0
 )
 
 st.sidebar.info(
