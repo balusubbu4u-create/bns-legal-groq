@@ -2,18 +2,24 @@ import os
 import streamlit as st
 from groq import Groq
 
-# 1. Streamlit పేజ్ సెటప్ (సవరించబడింది)
+# 1. Streamlit పేజ్ సెటప్
 st.set_page_config(page_title="Police Legal & Investigation Assistant", layout="wide")
 
 st.title("⚖️ పోలీస్ లీగల్ & ఇన్వెస్టిగేషన్ అసిస్టెంట్ (BNS, BNSS, BSA)")
 st.write("నూతన క్రిమినల్ చట్టాల ప్రకారం దర్యాప్తు అధికారుల (IO) కోసం మార్గదర్శకాలు.")
 
-# 2. API Key సెటప్ (సైడ్‌బార్‌లో ఇన్‌పుట్ ఇచ్చే సదుపాయం)
-api_key_input = st.sidebar.text_input("Groq API Key ఇవ్వండి:", type="password")
+# 2. Streamlit Secrets లేదా Environment Variables నుండి API Key పొందడం
+GROQ_API_KEY = ""
 
-if api_key_input:
-    GROQ_API_KEY = api_key_input
-else:
+try:
+    # st.secrets లో groq_api_key ఉందో లేదో చెక్ చేస్తుంది
+    if "groq_api_key" in st.secrets:
+        GROQ_API_KEY = st.secrets["groq_api_key"]
+except Exception:
+    pass
+
+# Secrets లో లేకపోతే పర్యావరణ వేరియబుల్ (Environment Variable) నుండి తీసుకుంటుంది
+if not GROQ_API_KEY:
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 # 3. పోలీసుల విచారణ ప్రక్రియకు తగిన స్ట్రక్చర్డ్ సిస్టమ్ ప్రాంప్ట్
@@ -77,7 +83,7 @@ user_query = st.text_area("కేసు వివరాలు లేదా ప�
 
 if st.button("మార్గదర్శకాలు రూపొందించు (Generate Report)"):
     if not GROQ_API_KEY:
-        st.error("దయచేసి మీ Groq API Key ని సైడ్‌బార్‌లో ఎంటర్ చేయండి.")
+        st.error("⚠️ API Key కనుగొనబడలేదు! దయచేసి Streamlit secrets లో లేదా Environment Variable లో 'groq_api_key' ని సెట్ చేయండి.")
     elif not user_query.strip():
         st.warning("దయచేసి కేసు వివరాలు రాయండి.")
     else:
