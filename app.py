@@ -1,11 +1,22 @@
 import os
+import streamlit as st
 from groq import Groq
 
-# 1. API Client సెటప్ (పర్యావరణ వేరియబుల్ లేదా నేరుగా కీ ఇవ్వండి)
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "మీ_GROQ_API_KEY_ఇక్కడ_ఇవ్వండి")
-client = Groq(api_key=GROQ_API_KEY)
+# 1. Streamlit పేజ్ సెటప్ (ఇది ముందుగా ఉండాలి)
+st.set_page_title_config(page_title="Police Legal & Investigation Assistant", layout="wide")
 
-# 2. పోలీసుల విచారణ ప్రక్రియకు తగిన స్ట్రక్చర్డ్ సిస్టమ్ ప్రాంప్ట్
+st.title("⚖️ పోలీస్ లీగల్ & ఇన్వెస్టిగేషన్ అసిస్టెంట్ (BNS, BNSS, BSA)")
+st.write("నూతన క్రిమినల్ చట్టాల ప్రకారం దర్యాప్తు అధికారుల (IO) కోసం మార్గదర్శకాలు.")
+
+# 2. API Key సెటప్ (సైడ్‌బార్‌లో లేదా కోడ్‌లో)
+api_key_input = st.sidebar.text_input("Groq API Key ఇవ్వండి:", type="password")
+
+if api_key_input:
+    GROQ_API_KEY = api_key_input
+else:
+    GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+
+# 3. పోలీసుల విచారణ ప్రక్రియకు తగిన స్ట్రక్చర్డ్ సిస్టమ్ ప్రాంప్ట్
 SYSTEM_PROMPT = """
 మీరు భారతీయ నూతన క్రిమినల్ చట్టాలపై (BNS, BNSS, BSA) లోతైన అవగాహన ఉన్న పోలీస్ లీగల్ & ఇన్వెస్టిగేషన్ అసిస్టెంట్.
 పోలీస్ అధికారులు లేదా దర్యాప్తు అధికారులకు (IO) అర్థమయ్యేలా తెలుగులో స్పష్టమైన, ఆచరణాత్మకమైన సమాధానాలు ఇవ్వాలి.
@@ -42,33 +53,37 @@ SYSTEM_PROMPT = """
    - చార్జిషీట్‌తో జతపరచవలసిన ప్రాథమిక డాక్యుమెంట్ల జాబితా (మహజర్, సీఎఫ్ఎస్ఎల్ రిపోర్ట్, BSA సర్టిఫికేట్, మెడికల్ రిపోర్ట్ మొదలైనవి).
 """
 
-def investigate_case(police_query: str):
-    """
-    పోలీస్ అధికారి అడిగిన ప్రశ్నకు BNS/BNSS/BSA సమగ్ర వివరాలను అందిస్తుంది.
-    """
+def investigate_case(police_query: str, client_obj):
     try:
-        chat_completion = client.chat.completions.create(
+        chat_completion = client_obj.chat.completions.create(
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": police_query}
             ],
             model="llama-3.3-70b-versatile",
-            temperature=0.2, # చట్టపరమైన ఖచ్చితత్వం కోసం తక్కువ టెంపరేచర్
+            temperature=0.2,
             max_tokens=2500
         )
         return chat_completion.choices[0].message.content
     except Exception as e:
         return f"లోపం సంభవించింది: {str(e)}"
 
-# 3. ఉపయోగించే విధానం (ఉదాహరణ పరీక్ష)
-if __name__ == "__main__":
-    # టెస్ట్ కేసు: రాత్రి వేళ జరిగిన దోపిడీ, బాధితుడు వాట్సాప్ మెసేజ్/ఫోన్ ద్వారా ఫిర్యాదు చేశాడు
-    test_query = """
-    బాధితుడి ఇంటి తాళాలు పగలగొట్టి రాత్రి పూట 10 తులాల బంగారం దొంగిలించారు. 
-    బాధితుడు ఊర్లో లేడు, వాట్సాప్ లో మెసేజ్ ద్వారా సమాచారం పంపాడు. 
-    దీనికి సెక్షన్లు, శిక్ష, బెయిల్, రికవరీ, డిజిటల్ ఎవిడెన్స్ మరియు చార్జిషీట్ వరకు SOP వివరాలు ఇవ్వండి.
-    """
-    
-    print("విచారణ అధికారికి మార్గదర్శకాలు రూపొందిస్తున్నాము...\n")
-    report = investigate_case(test_query)
-    print(report)
+# 4. Streamlit UI యూజర్ ఇన్‌పుట్ భాగం
+default_query = """బాధితుడి ఇంటి తాళాలు పగలగొట్టి రాత్రి పూట 10 తులాల బంగారం దొంగిలించారు. 
+బాధితుడు ఊర్లో లేడు, వాట్సాప్ లో మెసేజ్ ద్వారా సమాచారం పంపాడు. 
+దీనికి సెక్షన్లు, శిక్ష, బెయిల్, రికవరీ, డిజిటల్ ఎవిడెన్స్ మరియు చార్జిషీట్ వరకు SOP వివరాలు ఇవ్వండి."""
+
+user_query = st.text_area("కేసు వివరాలు లేదా ప్రశ్న ఇక్కడ నమోదు చేయండి:", value=default_query, height=150)
+
+if st.button("మార్గదర్శకాలు రూపొందించు (Generate Report)"):
+    if not GROQ_API_KEY:
+        st.error("దయచేసి మీ Groq API Key ని ఎంటర్ చేయండి లేదా Environment Variable లో సెట్ చేయండి.")
+    elif not user_query.strip():
+        st.warning("దయచేసి కేసు వివరాలు రాయండి.")
+    else:
+        with st.spinner("విచారణ అధికారికి మార్గదర్శకాలు తయారు చేయబడుతున్నాయి..."):
+            client = Groq(api_key=GROQ_API_KEY)
+            report = investigate_case(user_query, client)
+            st.success("నివేదిక విజయవంతంగా తయారైంది!")
+            st.markdown("---")
+            st.markdown(report)
