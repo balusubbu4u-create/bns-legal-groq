@@ -18,47 +18,39 @@ if "GROQ_API_KEY" not in st.secrets:
 
 api_key = st.secrets["GROQ_API_KEY"]
 
-# సైడ్‌బార్‌లో లైవ్ యాక్టివ్ మోడల్స్‌ను మాత్రమే తీసుకునే ఫంక్షన్
+# సైడ్‌బార్‌లో లైవ్ మోడల్ వెర్షన్లను పొందడం
 st.sidebar.header("⚙️ మోడల్ సెట్టింగ్స్")
 
-@st.cache_data(ttl=1800)
-def get_live_groq_models(key):
+@st.cache_data(ttl=3600)
+def get_available_groq_models(key):
     try:
         client = Groq(api_key=key)
         models_data = client.models.list().data
-        
-        # కేవలం టెక్స్ట్ చాట్ మోడల్స్‌ను మాత్రమే ఫిల్టర్ చేయడం (గార్డ్, ఆడియో, డిప్రికేటెడ్ కాకుండా)
-        blacklist = ["whisper", "guard", "gemma2", "vision"]
-        active_chat = [
+        # ఆడియో, గార్డ్ మోడల్స్ కాకుండా టెక్స్ట్ మోడల్స్ మాత్రమే
+        chat_models = [
             m.id for m in models_data 
-            if not any(b in m.id.lower() for b in blacklist)
+            if "whisper" not in m.id and "guard" not in m.id
         ]
-        
-        # llama-3.1-8b మరియు llama-3.3-70b లకు ప్రాధాన్యత
-        preferred = []
-        for p in ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]:
-            if p in active_chat:
-                preferred.append(p)
-                active_chat.remove(p)
-        
-        return preferred + active_chat
+        # Llama మోడల్స్‌ను ముందు వరుసలో ఉంచడం
+        chat_models.sort(key=lambda x: ("llama" in x.lower() or "gemma" in x.lower()), reverse=True)
+        return chat_models
     except Exception:
-        return ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]
+        return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 
-active_models = get_live_groq_models(api_key)
+available_models = get_available_groq_models(api_key)
 
 selected_model = st.sidebar.selectbox(
     "🤖 Groq AI Model వెర్షన్ ఎంచుకోండి:",
-    options=active_models,
+    options=available_models,
     index=0,
-    help="llama-3.1-8b-instant ఎక్కువ టోకెన్ లిమిట్ కలిగి ఉంటుంది, ఎర్రర్స్ రాకుండా వేగంగా పనిచేస్తుంది."
+    help="మీ Groq ఖాతాలో లైవ్‌గా పనిచేసే మోడల్స్ ఇక్కడ కనిపిస్తాయి."
 )
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("""
 **కవర్ చేయబడే అంశాలు:**
 - 🔹 BNS vs IPC సెక్షన్లు
-- 🔹 BNSS vs CrPC దర్యాప్తు విధానం (SOP)
+- 🔹 BNSS vs CrPC దర్యాప్తు విధానం
 - 🔹 BSA vs IEA ఎలక్ట్రానిక్/ఫోరెన్సిక్ సాక్ష్యాలు
 - 🔹 IO సమగ్ర యాక్షన్ చెక్‌లిస్ట్
 """)
@@ -103,33 +95,33 @@ legal_system_instruction = """
 మీరు భారతీయ క్రిమినల్ చట్టాలు (Bharatiya Nyaya Sanhita - BNS, Bharatiya Nagarik Suraksha Sanhita - BNSS, Bharatiya Sakshya Adhiniyam - BSA) మరియు వాటి పాత చట్టాలైన IPC, CrPC, Indian Evidence Act (IEA) లపై అత్యున్నత ప్రావీణ్యం ఉన్న అధికారిక లీగల్ & ఇన్వెస్టిగేషన్ స్పెషలిస్ట్.
 
 ఖచ్చితమైన నియమాలు:
-1. ప్రతి లీగల్ సెక్షన్‌కు కొత్త చట్టం (BNS/BNSS/BSA) మరియు పాత చట్టం (IPC/CrPC/IEA) పక్కపక్కనే స్పష్టంగా రాయాలి (ఉదా: BNS Section 303 / IPC Section 379).
-2. దర్యాప్తు విధానం (Investigation Procedure) లో పోలీసు అధికారి (IO) మొదటి నుండి చివరి వరకు పాటించాల్సిన స్టాండర్డ్ ఆపరేటింగ్ ప్రొసీజర్ (SOP) ను దశలవారీగా పేర్కొనాలి.
+1. ప్రతి లీగల్ సెక్షన్‌కు కొత్త చట్టం (BNS/BNSS/BSA) మరియు పాత చట్టం (IPC/CrPC/IEA) పక్కపక్కనే స్పష్టంగా రాయాలి. (ఉదా: BNS Section 303 / IPC Section 379).
+2. 'దర్యాప్తు విధానం' (Investigation Procedure) లో కేవలం పైపైన కాకుండా, పోలీసు అధికారి (IO) మొదటి నుండి చివరి వరకు పాటించాల్సిన స్టాండర్డ్ ఆపరేటింగ్ ప్రొసీజర్ (SOP) ను దశలవారీగా పేర్కొనాలి.
 3. మొత్తం నివేదిక స్పష్టమైన తెలుగులో, పాయింట్ల రూపంలో ఉండాలి.
 
 క్రింది క్రమంలో మాత్రమే సమగ్ర నివేదిక రూపొందించాలి:
 
 ### 1. వర్తించే సెక్షన్లు & శిక్షల వివరాలు (BNS vs IPC)
-- ప్రతి నేరానికి BNS Section మరియు పాత IPC Section.
-- గరిష్ట శిక్ష మరియు జరిమానా.
+- ఫిర్యాదులోని అంశాలకు వర్తించే ప్రతి నేరానికి BNS Section మరియు పాత IPC Section.
+- ఆయా సెక్షన్లకు నిర్దేశించిన గరిష్ట శిక్ష మరియు జరిమానా.
 - నేరాల స్వభావం (Cognizable / Non-Cognizable, Bailable / Non-Bailable).
 
 ### 2. దర్యాప్తు విధానం & చట్టపరమైన ప్రక్రియ (BNSS vs CrPC SOP)
-- ఎఫ్‌ఐఆర్ నమోదు & ప్రిలిమినరీ ఎంక్వైరీ (BNSS 173 / CrPC 154).
-- నోటీసులు & హాజరు (BNSS 35(3) / CrPC 41A).
-- అరెస్ట్, రిమాండ్ & కస్టడీ నిబంధనలు (BNSS 187).
-- శోధన & స్వాధీనం (Search & Seizure) - BNSS 105 ప్రకారం తప్పనిసరి వీడియో రికార్డింగ్, పంచనామా.
-- కాలపరిమితులు (Timelines): దర్యాప్తు మరియు చార్జ్‌షీట్ దాఖలు గడువులు.
+- **ఎఫ్‌ఐఆర్ నమోదు & ప్రిలిమినరీ విచారణ:** BNSS 173 (పాత CrPC 154) నిబంధనలు.
+- **నోటీసులు & హాజరు:** 7 సంవత్సరాల లోపు శిక్ష పడే కేసుల్లో BNSS 35(3) (పాత CrPC 41A) నోటీసు విధానం.
+- **అరెస్ట్ & రిమాండ్ నిబంధనలు:** BNSS సెక్షన్లు, సమాచార హక్కులు, 24 గంటల మెజిస్ట్రేట్ హాజరు, పోలీస్/జ్యుడీషియల్ కస్టడీ గరిష్ట పరిమితులు (BNSS 187).
+- **శోధన & స్వాధీనం (Search & Seizure):** BNSS 105 ప్రకారం ఆడియో-వీడియో రికార్డింగ్ నిబంధన, పంచనామా విధానం.
+- **కాలపరిమితులు (Timelines):** దర్యాప్తు పూర్తి, మెడికల్ రిపోర్టులు, మరియు చార్జ్‌షీట్ దాఖలు గడువులు (60/90 రోజులు).
 
 ### 3. సాక్ష్యాధారాల సేకరణ & ఫోరెన్సిక్ మార్గదర్శకాలు (BSA vs IEA)
-- సంఘటనా స్థలం పరిశీలన, వీడియోగ్రఫీ.
-- డిజిటల్ సాక్ష్యాలు: BSA Section 63 సర్టిఫికేషన్ (పాత 65B స్థానంలో).
-- తీవ్ర నేరాలకు ఫోరెన్సిక్ విజిట్ (BNSS 176(3)).
+- సంఘటనా స్థలం పరిశీలన, క్రైమ్ సీన్ ఫోటోగ్రఫీ/వీడియోగ్రఫీ నిబంధనలు.
+- డిజిటల్ & ఎలక్ట్రానిక్ సాక్ష్యాల గుర్తింపు: BSA Section 63 సర్టిఫికేషన్ (పాత 65B సర్టిఫికెట్ స్థానంలో).
+- 7 ఏళ్లు పైబడిన శిక్ష పడే తీవ్ర నేరాలకు ఫోరెన్సిక్ నిపుణుల తప్పనిసరి విజిట్ (BNSS 176(3)).
 
 ### 4. దర్యాప్తు అధికారి (IO) సమగ్ర యాక్షన్ చెక్‌లిస్ట్
-- [ ] వెంటనే చేయాల్సిన అత్యవసర చర్యలు.
-- [ ] సేకరించాల్సిన డాక్యుమెంట్లు, సాక్షుల వాంగ్మూలాలు (BNSS 180 / CrPC 161).
-- [ ] సాంకేతిక ఆధారాల సేకరణ (CDR, CCTV).
+- [ ] వెంటనే చేయాల్సిన 5 అత్యవసర చర్యలు.
+- [ ] సేకరించాల్సిన డాక్యుమెంట్లు, స్టేట్‌మెంట్లు (BNSS 180 / CrPC 161).
+- [ ] సాంకేతిక ఆధారాల సేకరణ (CDR, CCTV, మొబైల్ డాటా).
 
 చివరలో తప్పనిసరిగా:
 "గమనిక: ఇది ప్రాథమిక సమాచారం మరియు దర్యాప్తు మార్గదర్శకత్వం కోసం మాత్రమే; తుది చట్టపరమైన నిర్ణయాల కోసం న్యాయ నిపుణులను సంప్రదించాలి." అని రాయండి.
@@ -139,35 +131,21 @@ if st.button("🔍 కేస్ విశ్లేషించి దర్య�
     if not case_text.strip():
         st.warning("దయచేసి ఫిర్యాదు వివరాలను నమోదు చేయండి లేదా ఫైల్ అప్‌లోడ్ చేయండి.")
     else:
-        trimmed_case_text = case_text[:3000]
+        # కంటెక్స్ట్ విండో దాటకుండా ఉండటానికి మొదటి 2500 అక్షరాలు
+        trimmed_case_text = case_text[:2500]
 
-        with st.spinner(f"AI మోడల్ ({selected_model}) ద్వారా దర్యాప్తు నివేదిక సిద్ధమవుతోంది..."):
+        with st.spinner(f"AI మోడల్ ({selected_model}) ద్వారా దర్యాప్తు విధానాలు మరియు సెక్షన్ల పరిశీలన జరుగుతోంది..."):
             try:
                 client = Groq(api_key=api_key)
 
-                # 429 రేట్ లిమిట్ వస్తే రక్షించే ఫాల్‌బ్యాక్ లాజిక్
-                try:
-                    response = client.chat.completions.create(
-                        model=selected_model,
-                        temperature=0.1,
-                        messages=[
-                            {"role": "system", "content": legal_system_instruction},
-                            {"role": "user", "content": f"కేసు వివరాలు:\n{trimmed_case_text}"}
-                        ]
-                    )
-                except Exception as model_err:
-                    if "429" in str(model_err) and selected_model != "llama-3.1-8b-instant":
-                        st.info("⚠️ ఎంచుకున్న మోడల్‌కు రేట్ లిమిట్ చేరింది. ఆటోమేటిక్‌గా వేగవంతమైన 'llama-3.1-8b-instant' తో విశ్లేషిస్తోంది...")
-                        response = client.chat.completions.create(
-                            model="llama-3.1-8b-instant",
-                            temperature=0.1,
-                            messages=[
-                                {"role": "system", "content": legal_system_instruction},
-                                {"role": "user", "content": f"కేసు వివరాలు:\n{trimmed_case_text}"}
-                            ]
-                        )
-                    else:
-                        raise model_err
+                response = client.chat.completions.create(
+                    model=selected_model,
+                    temperature=0.1,
+                    messages=[
+                        {"role": "system", "content": legal_system_instruction},
+                        {"role": "user", "content": f"కేసు ఫిర్యాదు పూర్తి వివరాలు:\n{trimmed_case_text}"}
+                    ]
+                )
 
                 result = response.choices[0].message.content
 
