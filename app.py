@@ -18,26 +18,47 @@ if "GROQ_API_KEY" not in st.secrets:
 
 api_key = st.secrets["GROQ_API_KEY"]
 
-# సైడ్‌బార్‌లో మోడల్ ఎంపిక - వేగవంతమైన, హై-లిమిట్ మోడల్ మొదటిదిగా
+# సైడ్‌బార్‌లో లైవ్ యాక్టివ్ మోడల్స్‌ను మాత్రమే తీసుకునే ఫంక్షన్
 st.sidebar.header("⚙️ మోడల్ సెట్టింగ్స్")
-available_models = [
-    "llama-3.1-8b-instant",       # అత్యంత వేగవంతమైనది, ఎక్కువ రేట్ లిమిట్ (429 రాదు)
-    "llama-3.3-70b-versatile",    # లోతైన విశ్లేషణ (పరిమితి త్వరగా అయిపోవచ్చు)
-    "gemma2-9b-it"
-]
+
+@st.cache_data(ttl=1800)
+def get_live_groq_models(key):
+    try:
+        client = Groq(api_key=key)
+        models_data = client.models.list().data
+        
+        # కేవలం టెక్స్ట్ చాట్ మోడల్స్‌ను మాత్రమే ఫిల్టర్ చేయడం (గార్డ్, ఆడియో, డిప్రికేటెడ్ కాకుండా)
+        blacklist = ["whisper", "guard", "gemma2", "vision"]
+        active_chat = [
+            m.id for m in models_data 
+            if not any(b in m.id.lower() for b in blacklist)
+        ]
+        
+        # llama-3.1-8b మరియు llama-3.3-70b లకు ప్రాధాన్యత
+        preferred = []
+        for p in ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]:
+            if p in active_chat:
+                preferred.append(p)
+                active_chat.remove(p)
+        
+        return preferred + active_chat
+    except Exception:
+        return ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]
+
+active_models = get_live_groq_models(api_key)
 
 selected_model = st.sidebar.selectbox(
     "🤖 Groq AI Model వెర్షన్ ఎంచుకోండి:",
-    options=available_models,
+    options=active_models,
     index=0,
-    help="llama-3.1-8b-instant ఎంచుకుంటే 429 Rate Limit ఎర్రర్ రాకుండా వేగంగా పనిచేస్తుంది."
+    help="llama-3.1-8b-instant ఎక్కువ టోకెన్ లిమిట్ కలిగి ఉంటుంది, ఎర్రర్స్ రాకుండా వేగంగా పనిచేస్తుంది."
 )
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("""
 **కవర్ చేయబడే అంశాలు:**
 - 🔹 BNS vs IPC సెక్షన్లు
-- 🔹 BNSS vs CrPC దర్యాప్తు విధానం
+- 🔹 BNSS vs CrPC దర్యాప్తు విధానం (SOP)
 - 🔹 BSA vs IEA ఎలక్ట్రానిక్/ఫోరెన్సిక్ సాక్ష్యాలు
 - 🔹 IO సమగ్ర యాక్షన్ చెక్‌లిస్ట్
 """)
@@ -120,11 +141,11 @@ if st.button("🔍 కేస్ విశ్లేషించి దర్య�
     else:
         trimmed_case_text = case_text[:3000]
 
-        with st.spinner("దర్యాప్తు నివేదిక సిద్ధమవుతోంది..."):
+        with st.spinner(f"AI మోడల్ ({selected_model}) ద్వారా దర్యాప్తు నివేదిక సిద్ధమవుతోంది..."):
             try:
                 client = Groq(api_key=api_key)
 
-                # ఒకవేళ ఎంచుకున్న మోడల్‌కి 429 వస్తే ఆటోమేటిక్‌గా 8b మోడల్‌కి మారే లాజిక్
+                # 429 రేట్ లిమిట్ వస్తే రక్షించే ఫాల్‌బ్యాక్ లాజిక్
                 try:
                     response = client.chat.completions.create(
                         model=selected_model,
@@ -136,7 +157,7 @@ if st.button("🔍 కేస్ విశ్లేషించి దర్య�
                     )
                 except Exception as model_err:
                     if "429" in str(model_err) and selected_model != "llama-3.1-8b-instant":
-                        st.info("⚠️ 70B మోడల్‌కు రేట్ లిమిట్ చేరింది. ఆటోమేటిక్‌గా వేగవంతమైన 8B మోడల్‌తో విశ్లేషిస్తోంది...")
+                        st.info("⚠️ ఎంచుకున్న మోడల్‌కు రేట్ లిమిట్ చేరింది. ఆటోమేటిక్‌గా వేగవంతమైన 'llama-3.1-8b-instant' తో విశ్లేషిస్తోంది...")
                         response = client.chat.completions.create(
                             model="llama-3.1-8b-instant",
                             temperature=0.1,
