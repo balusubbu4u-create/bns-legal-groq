@@ -1,6 +1,3 @@
 streamlit
 groq
 pypdf
-python-docx
-Pillow
-PyMuPDF
