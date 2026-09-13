@@ -42,10 +42,10 @@ except Exception:
 
 
 # =========================================================
-# MODELS (Using updated active Groq models)
+# MODELS
 # =========================================================
 
-TEXT_MODEL = "llama-3.3-70b-versatile"
+TEXT_MODEL = "openai/gpt-oss-120b"
 VISION_MODEL = "llama-3.2-11b-vision-preview"
 
 
