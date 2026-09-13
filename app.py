@@ -1,6 +1,12 @@
 import streamlit as st
 from groq import Groq
 from pypdf import PdfReader
+import base64
+import io
+
+# =========================================================
+# PAGE SETTINGS
+# =========================================================
 
 st.set_page_config(
     page_title="BNS Legal Assistant",
@@ -9,157 +15,627 @@ st.set_page_config(
 )
 
 st.title("⚖️ BNS, BNSS & BSA లీగల్ & దర్యాప్తు అసిస్టెంట్")
-st.caption("భారతీయ క్రిమినల్ చట్టాలు (BNS, BNSS, BSA) & పాత చట్టాల (IPC, CrPC, IEA) సమగ్ర విశ్లేషణ")
+st.caption(
+    "BNS / IPC • BNSS / CrPC • BSA / IEA "
+    "— చట్టపరమైన విశ్లేషణ మరియు దర్యాప్తు సహాయక సాధనం"
+)
 
-# Streamlit Secrets నుండి API Key పొందడం
+# =========================================================
+# API KEY
+# =========================================================
+
 if "GROQ_API_KEY" not in st.secrets:
-    st.error("Streamlit Secrets లో 'GROQ_API_KEY' కనిపించలేదు. దయచేసి App Settings -> Secrets లో నమోదు చేయండి.")
+    st.error(
+        "Streamlit Secrets లో GROQ_API_KEY కనిపించలేదు. "
+        "App Settings → Secrets లో GROQ_API_KEY నమోదు చేయండి."
+    )
     st.stop()
 
 api_key = st.secrets["GROQ_API_KEY"]
 
-# సైడ్‌బార్‌లో లైవ్ మోడల్ వెర్షన్లను పొందడం
-st.sidebar.header("⚙️ మోడల్ సెట్టింగ్స్")
+client = Groq(api_key=api_key)
 
-@st.cache_data(ttl=3600)
-def get_available_groq_models(key):
-    try:
-        client = Groq(api_key=key)
-        models_data = client.models.list().data
-        # ఆడియో, గార్డ్ మోడల్స్ కాకుండా టెక్స్ట్ మోడల్స్ మాత్రమే
-        chat_models = [
-            m.id for m in models_data 
-            if "whisper" not in m.id and "guard" not in m.id
-        ]
-        # Llama మోడల్స్‌ను ముందు వరుసలో ఉంచడం
-        chat_models.sort(key=lambda x: ("llama" in x.lower() or "gemma" in x.lower()), reverse=True)
-        return chat_models
-    except Exception:
-        return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+# =========================================================
+# MODEL SETTINGS
+# =========================================================
 
-available_models = get_available_groq_models(api_key)
+st.sidebar.header("⚙️ AI Model")
+
+# Text + image analysis కోసం current vision-capable model
+DEFAULT_MODEL = "qwen/qwen3.6-27b"
 
 selected_model = st.sidebar.selectbox(
-    "🤖 Groq AI Model వెర్షన్ ఎంచుకోండి:",
-    options=available_models,
-    index=0,
-    help="మీ Groq ఖాతాలో లైవ్‌గా పనిచేసే మోడల్స్ ఇక్కడ కనిపిస్తాయి."
+    "మోడల్ ఎంచుకోండి",
+    [
+        "qwen/qwen3.6-27b",
+        "qwen/qwen3.8-27b",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b"
+    ],
+    index=0
+)
+
+st.sidebar.info(
+    "📌 Screenshot / JPG / PNG analysis కోసం "
+    "vision-capable model అవసరం."
 )
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("""
-**కవర్ చేయబడే అంశాలు:**
-- 🔹 BNS vs IPC సెక్షన్లు
-- 🔹 BNSS vs CrPC దర్యాప్తు విధానం
-- 🔹 BSA vs IEA ఎలక్ట్రానిక్/ఫోరెన్సిక్ సాక్ష్యాలు
-- 🔹 IO సమగ్ర యాక్షన్ చెక్‌లిస్ట్
-""")
 
-tab1, tab2 = st.tabs(["📝 టెక్స్ట్ వివరాలు", "📁 PDF / Text ఫైల్ అప్‌లోడ్"])
+st.sidebar.markdown(
+    """
+### 📚 Analysis Areas
+
+- BNS ↔ IPC
+- BNSS ↔ CrPC
+- BSA ↔ IEA
+- Cognizable / Non-Cognizable
+- Bailable / Non-Bailable
+- Punishment
+- Investigation SOP
+- Digital Evidence
+- IO Checklist
+"""
+)
+
+# =========================================================
+# FILE UPLOAD
+# =========================================================
+
+st.subheader("📂 Complaint / Evidence Upload")
+
+uploaded_file = st.file_uploader(
+    "PDF / TXT / JPG / JPEG / PNG / WEBP ఫైల్ ఎంచుకోండి",
+    type=[
+        "pdf",
+        "txt",
+        "jpg",
+        "jpeg",
+        "png",
+        "webp"
+    ],
+    help="Complaint PDF, text file లేదా screenshot/image upload చేయవచ్చు."
+)
 
 case_text = ""
+image_data = None
+image_mime = None
+
+# =========================================================
+# TEXT INPUT
+# =========================================================
+
+tab1, tab2 = st.tabs(
+    ["📝 Text Details", "📁 File / Screenshot"]
+)
 
 with tab1:
+
     text_input = st.text_area(
-        "ఫిర్యాదు వివరాలు ఇక్కడ నమోదు చేయండి:",
-        height=180,
-        placeholder="ఉదాహరణ: అర్ధరాత్రి ఇంట్లోకి అక్రమంగా ప్రవేశించి బంగారు నగలు, నగదు దోచుకెళ్లారు. బాధితులపై దాడి చేసి బెదిరించారు..."
+        "ఫిర్యాదు / కేసు వివరాలు:",
+        height=220,
+        placeholder=(
+            "ఉదాహరణ:\n"
+            "అర్ధరాత్రి ఇంట్లోకి ప్రవేశించి వస్తువులు తీసుకెళ్లారు. "
+            "బాధితుడిని కొట్టారు మరియు బెదిరించారు..."
+        )
     )
-    if text_input:
-        case_text = text_input
+
+    if text_input.strip():
+        case_text = text_input.strip()
+
+
+# =========================================================
+# FILE PROCESSING
+# =========================================================
 
 with tab2:
-    uploaded_file = st.file_uploader(
-        "ఫిర్యాదు PDF లేదా TXT ఫైల్ ఎంచుకోండి",
-        type=["pdf", "txt"]
-    )
+
     if uploaded_file:
-        if uploaded_file.type == "application/pdf":
+
+        file_name = uploaded_file.name.lower()
+        file_bytes = uploaded_file.getvalue()
+
+        # -------------------------------------------------
+        # PDF
+        # -------------------------------------------------
+
+        if file_name.endswith(".pdf"):
+
             try:
-                reader = PdfReader(uploaded_file)
-                extracted_text = ""
-                for page in reader.pages:
-                    text = page.extract_text()
-                    if text:
-                        extracted_text += text + "\n"
-                case_text = extracted_text
-                st.success(f"✅ PDF ఫైల్ విజయవంతంగా లోడ్ అయింది: {uploaded_file.name}")
-            except Exception as pdf_err:
-                st.error(f"PDF చదవడంలో లోపం: {pdf_err}")
-        elif uploaded_file.type == "text/plain":
-            case_text = uploaded_file.getvalue().decode("utf-8")
-            st.success(f"✅ Text ఫైల్ లోడ్ అయింది: {uploaded_file.name}")
 
-# దర్యాప్తు విధానం మరియు సెక్షన్ల సమగ్ర విశ్లేషణ ప్రాంప్ట్
-legal_system_instruction = """
-మీరు భారతీయ క్రిమినల్ చట్టాలు (Bharatiya Nyaya Sanhita - BNS, Bharatiya Nagarik Suraksha Sanhita - BNSS, Bharatiya Sakshya Adhiniyam - BSA) మరియు వాటి పాత చట్టాలైన IPC, CrPC, Indian Evidence Act (IEA) లపై అత్యున్నత ప్రావీణ్యం ఉన్న అధికారిక లీగల్ & ఇన్వెస్టిగేషన్ స్పెషలిస్ట్.
-
-ఖచ్చితమైన నియమాలు:
-1. ప్రతి లీగల్ సెక్షన్‌కు కొత్త చట్టం (BNS/BNSS/BSA) మరియు పాత చట్టం (IPC/CrPC/IEA) పక్కపక్కనే స్పష్టంగా రాయాలి. (ఉదా: BNS Section 303 / IPC Section 379).
-2. 'దర్యాప్తు విధానం' (Investigation Procedure) లో కేవలం పైపైన కాకుండా, పోలీసు అధికారి (IO) మొదటి నుండి చివరి వరకు పాటించాల్సిన స్టాండర్డ్ ఆపరేటింగ్ ప్రొసీజర్ (SOP) ను దశలవారీగా పేర్కొనాలి.
-3. మొత్తం నివేదిక స్పష్టమైన తెలుగులో, పాయింట్ల రూపంలో ఉండాలి.
-
-క్రింది క్రమంలో మాత్రమే సమగ్ర నివేదిక రూపొందించాలి:
-
-### 1. వర్తించే సెక్షన్లు & శిక్షల వివరాలు (BNS vs IPC)
-- ఫిర్యాదులోని అంశాలకు వర్తించే ప్రతి నేరానికి BNS Section మరియు పాత IPC Section.
-- ఆయా సెక్షన్లకు నిర్దేశించిన గరిష్ట శిక్ష మరియు జరిమానా.
-- నేరాల స్వభావం (Cognizable / Non-Cognizable, Bailable / Non-Bailable).
-
-### 2. దర్యాప్తు విధానం & చట్టపరమైన ప్రక్రియ (BNSS vs CrPC SOP)
-- **ఎఫ్‌ఐఆర్ నమోదు & ప్రిలిమినరీ విచారణ:** BNSS 173 (పాత CrPC 154) నిబంధనలు.
-- **నోటీసులు & హాజరు:** 7 సంవత్సరాల లోపు శిక్ష పడే కేసుల్లో BNSS 35(3) (పాత CrPC 41A) నోటీసు విధానం.
-- **అరెస్ట్ & రిమాండ్ నిబంధనలు:** BNSS సెక్షన్లు, సమాచార హక్కులు, 24 గంటల మెజిస్ట్రేట్ హాజరు, పోలీస్/జ్యుడీషియల్ కస్టడీ గరిష్ట పరిమితులు (BNSS 187).
-- **శోధన & స్వాధీనం (Search & Seizure):** BNSS 105 ప్రకారం ఆడియో-వీడియో రికార్డింగ్ నిబంధన, పంచనామా విధానం.
-- **కాలపరిమితులు (Timelines):** దర్యాప్తు పూర్తి, మెడికల్ రిపోర్టులు, మరియు చార్జ్‌షీట్ దాఖలు గడువులు (60/90 రోజులు).
-
-### 3. సాక్ష్యాధారాల సేకరణ & ఫోరెన్సిక్ మార్గదర్శకాలు (BSA vs IEA)
-- సంఘటనా స్థలం పరిశీలన, క్రైమ్ సీన్ ఫోటోగ్రఫీ/వీడియోగ్రఫీ నిబంధనలు.
-- డిజిటల్ & ఎలక్ట్రానిక్ సాక్ష్యాల గుర్తింపు: BSA Section 63 సర్టిఫికేషన్ (పాత 65B సర్టిఫికెట్ స్థానంలో).
-- 7 ఏళ్లు పైబడిన శిక్ష పడే తీవ్ర నేరాలకు ఫోరెన్సిక్ నిపుణుల తప్పనిసరి విజిట్ (BNSS 176(3)).
-
-### 4. దర్యాప్తు అధికారి (IO) సమగ్ర యాక్షన్ చెక్‌లిస్ట్
-- [ ] వెంటనే చేయాల్సిన 5 అత్యవసర చర్యలు.
-- [ ] సేకరించాల్సిన డాక్యుమెంట్లు, స్టేట్‌మెంట్లు (BNSS 180 / CrPC 161).
-- [ ] సాంకేతిక ఆధారాల సేకరణ (CDR, CCTV, మొబైల్ డాటా).
-
-చివరలో తప్పనిసరిగా:
-"గమనిక: ఇది ప్రాథమిక సమాచారం మరియు దర్యాప్తు మార్గదర్శకత్వం కోసం మాత్రమే; తుది చట్టపరమైన నిర్ణయాల కోసం న్యాయ నిపుణులను సంప్రదించాలి." అని రాయండి.
-"""
-
-if st.button("🔍 కేస్ విశ్లేషించి దర్యాప్తు నివేదిక రూపొందించండి", type="primary"):
-    if not case_text.strip():
-        st.warning("దయచేసి ఫిర్యాదు వివరాలను నమోదు చేయండి లేదా ఫైల్ అప్‌లోడ్ చేయండి.")
-    else:
-        # కంటెక్స్ట్ విండో దాటకుండా ఉండటానికి మొదటి 2500 అక్షరాలు
-        trimmed_case_text = case_text[:2500]
-
-        with st.spinner(f"AI మోడల్ ({selected_model}) ద్వారా దర్యాప్తు విధానాలు మరియు సెక్షన్ల పరిశీలన జరుగుతోంది..."):
-            try:
-                client = Groq(api_key=api_key)
-
-                response = client.chat.completions.create(
-                    model=selected_model,
-                    temperature=0.1,
-                    messages=[
-                        {"role": "system", "content": legal_system_instruction},
-                        {"role": "user", "content": f"కేసు ఫిర్యాదు పూర్తి వివరాలు:\n{trimmed_case_text}"}
-                    ]
+                reader = PdfReader(
+                    io.BytesIO(file_bytes)
                 )
 
-                result = response.choices[0].message.content
+                extracted_pages = []
 
-                if result:
-                    st.markdown("---")
-                    st.markdown("## 📋 సమగ్ర దర్యాప్తు & చట్టపరమైన విశ్లేషణ నివేదిక")
-                    st.markdown(result)
+                for page in reader.pages:
 
-                    st.download_button(
-                        label="📥 నివేదికను ఫైల్‌గా డౌన్‌లోడ్ చేయండి (TXT)",
-                        data=result,
-                        file_name="BNS_Investigation_Report.txt",
-                        mime="text/plain"
+                    page_text = page.extract_text()
+
+                    if page_text:
+                        extracted_pages.append(page_text)
+
+                case_text = "\n\n".join(extracted_pages)
+
+                if case_text.strip():
+
+                    st.success(
+                        f"✅ PDF చదవబడింది: {uploaded_file.name}"
+                    )
+
+                    with st.expander("📄 Extracted PDF Text"):
+                        st.text(case_text[:10000])
+
+                else:
+
+                    st.warning(
+                        "⚠️ ఈ PDFలో selectable text కనిపించలేదు. "
+                        "ఇది scanned PDF అయితే screenshot/imageగా upload చేయండి."
                     )
 
             except Exception as e:
-                st.error(f"విశ్లేషణలో లోపం ఏర్పడింది: {e}")
+
+                st.error(
+                    f"PDF చదవడంలో సమస్య: {e}"
+                )
+
+        # -------------------------------------------------
+        # TXT
+        # -------------------------------------------------
+
+        elif file_name.endswith(".txt"):
+
+            try:
+
+                case_text = file_bytes.decode(
+                    "utf-8",
+                    errors="ignore"
+                )
+
+                st.success(
+                    f"✅ Text file చదవబడింది: {uploaded_file.name}"
+                )
+
+                with st.expander("📝 Text Preview"):
+                    st.text(case_text[:10000])
+
+            except Exception as e:
+
+                st.error(
+                    f"TXT చదవడంలో సమస్య: {e}"
+                )
+
+        # -------------------------------------------------
+        # IMAGE
+        # -------------------------------------------------
+
+        elif file_name.endswith(
+            (".jpg", ".jpeg", ".png", ".webp")
+        ):
+
+            image_data = base64.b64encode(
+                file_bytes
+            ).decode("utf-8")
+
+            if file_name.endswith(".png"):
+                image_mime = "image/png"
+
+            elif file_name.endswith(".webp"):
+                image_mime = "image/webp"
+
+            else:
+                image_mime = "image/jpeg"
+
+            st.success(
+                f"✅ Image loaded: {uploaded_file.name}"
+            )
+
+            st.image(
+                file_bytes,
+                caption="Uploaded Complaint / Screenshot",
+                use_container_width=True
+            )
+
+
+# =========================================================
+# LEGAL SYSTEM PROMPT
+# =========================================================
+
+LEGAL_SYSTEM_PROMPT = r"""
+మీరు భారతదేశ క్రిమినల్ చట్టాలపై సహాయక Legal & Investigation
+Analysis Assistant.
+
+మీరు BNS 2023, BNSS 2023, BSA 2023 మరియు పాత IPC 1860,
+CrPC 1973, Indian Evidence Act 1872 మధ్య సంబంధాన్ని
+చాలా జాగ్రత్తగా విశ్లేషించాలి.
+
+============================================================
+🚨 ABSOLUTE LEGAL ACCURACY RULES
+============================================================
+
+1. SECTION NUMBER ఎప్పుడూ ఊహించకూడదు.
+
+2. Complaint factsలో లేని నేరాన్ని జోడించకూడదు.
+
+3. BNS ↔ IPC correspondenceను section-number similarity
+   ఆధారంగా తయారు చేయకూడదు.
+
+4. Direct corresponding provision ఖచ్చితంగా తెలియకపోతే:
+
+   "Direct correspondence not established —
+    legal verification required"
+
+   అని రాయాలి.
+
+5. ఒక BNS sectionకు IPCలో direct equivalent లేకపోతే
+   false equivalent ఇవ్వకూడదు.
+
+6. ఒక IPC sectionకు BNSలో direct equivalent లేకపోతే
+   false equivalent ఇవ్వకూడదు.
+
+7. "No direct corresponding provision" అనేది valid answer.
+
+8. Punishment, fine, cognizable/non-cognizable,
+   bailable/non-bailable విషయాలను కూడా ఊహించకూడదు.
+
+9. Investigation procedure sectionను offence sectionతో
+   కలపకూడదు.
+
+10. Arrest section, remand section, charge-sheet section,
+    evidence section వేర్వేరు విషయాలు.
+
+11. 60/90 days విషయాన్ని automatic "charge-sheet deadline"
+    అని చెప్పకూడదు. అది statutory custody/default-bail
+    frameworkతో సంబంధం ఉన్న విషయం కావచ్చు.
+
+12. BNSS 193 మరియు BNSS 187 వంటి procedural provisionsను
+    వేర్వేరుగా analyse చేయాలి.
+
+13. BSA Section 63 electronic evidence విషయాన్ని
+    fact-specificగా explain చేయాలి.
+
+14. "BSA 63 = every electronic evidence automatically
+    needs one identical certificate" అని blanket statement
+    ఇవ్వకూడదు.
+
+15. Legal uncertainty ఉంటే:
+
+    ⚠️ LEGAL VERIFICATION REQUIRED
+
+    అని స్పష్టంగా చూపించాలి.
+
+============================================================
+📚 CORRESPONDENCE RULE
+============================================================
+
+ప్రతి offenceకు ఈ format ఉపయోగించాలి:
+
+OFFENCE
+-------
+Facts:
+
+Possible BNS Section:
+Possible IPC Section:
+
+Direct Correspondence:
+YES / NO / REQUIRES VERIFICATION
+
+BNS Provision:
+...
+
+IPC Provision:
+...
+
+Punishment:
+...
+
+Cognizable:
+...
+
+Bailable:
+...
+
+Verification Status:
+HIGH / MEDIUM / REQUIRES LEGAL VERIFICATION
+
+
+============================================================
+⚠️ IMPORTANT
+============================================================
+
+AI memory ద్వారా IPC → BNS mapping తయారు చేయకూడదు.
+
+Known correspondence లేకపోతే guess చేయకూడదు.
+
+ఉదాహరణకు:
+
+❌ "IPC 454 కాబట్టి BNS 305"
+
+అని number pattern ఆధారంగా నిర్ణయించకూడదు.
+
+Facts మరియు statutory offence elements ఆధారంగా మాత్రమే
+correspondence analyse చేయాలి.
+
+============================================================
+📋 REPORT FORMAT
+============================================================
+
+### 1. CASE FACTS
+
+Complaintలో నిజంగా ఉన్న facts మాత్రమే.
+
+### 2. POSSIBLE OFFENCES
+
+ప్రతి offence విడిగా.
+
+### 3. BNS ↔ IPC COMPARISON
+
+Table format:
+
+| Offence | BNS | IPC | Direct Correspondence | Verification |
+|---|---|---|---|---|
+
+### 4. PUNISHMENT & CLASSIFICATION
+
+| Section | Punishment | Cognizable | Bailable |
+|---|---|---|---|
+
+### 5. BNSS INVESTIGATION PROCEDURE
+
+FIR
+↓
+Scene preservation
+↓
+Witnesses
+↓
+Evidence
+↓
+Search / seizure
+↓
+Arrest if legally necessary
+↓
+Remand where applicable
+↓
+Forensic evidence
+↓
+Electronic evidence
+↓
+Police report / charge-sheet
+
+ప్రతి stepకు సరైన BNSS provisionను మాత్రమే ఇవ్వాలి.
+
+### 6. DIGITAL / ELECTRONIC EVIDENCE
+
+CCTV
+Mobile
+CDR
+GPS
+WhatsApp
+Photos
+Videos
+Computer records
+
+వాటికి BSA applicabilityను explain చేయాలి.
+
+### 7. IO CHECKLIST
+
+[ ] FIR
+[ ] Scene inspection
+[ ] Photographs / video
+[ ] Witness statements
+[ ] Medical evidence where relevant
+[ ] Search / seizure
+[ ] Seizure mahazar
+[ ] CCTV preservation
+[ ] Digital evidence
+[ ] FSL / forensic examination where applicable
+[ ] Accused examination / arrest where legally necessary
+[ ] Case diary
+[ ] Final police report
+
+### 8. IMPORTANT LEGAL WARNINGS
+
+ఏ section / mapping / procedureపై uncertainty ఉందో
+విడిగా చూపించాలి.
+
+చివరగా:
+
+"గమనిక: ఇది ప్రాథమిక legal information మరియు
+investigation assistance కోసం మాత్రమే. తుది చట్టపరమైన
+నిర్ణయం కోసం అధికారిక చట్ట పాఠ్యం, సంబంధిత Schedule/
+Corresponding Table మరియు అవసరమైతే న్యాయ నిపుణుల
+సలహాను పరిశీలించాలి."
+
+============================================================
+"""
+
+# =========================================================
+# IMAGE PROMPT
+# =========================================================
+
+IMAGE_INSTRUCTION = """
+ఈ image/screenshotలో ఉన్న complaint లేదా document textను
+ముందుగా జాగ్రత్తగా చదవండి.
+
+1. కనిపించే textను తప్పుగా ఊహించకండి.
+2. చదవలేని పదాలను [ILLEGIBLE]గా గుర్తించండి.
+3. ముందుగా facts extract చేయండి.
+4. తరువాత legal analysis చేయండి.
+5. Imageలో లేని factsను కల్పించకండి.
+"""
+
+
+# =========================================================
+# ANALYSIS FUNCTION
+# =========================================================
+
+def analyse_text(text):
+
+    response = client.chat.completions.create(
+
+        model=selected_model,
+
+        temperature=0.0,
+
+        max_completion_tokens=8000,
+
+        messages=[
+            {
+                "role": "system",
+                "content": LEGAL_SYSTEM_PROMPT
+            },
+            {
+                "role": "user",
+                "content": (
+                    "క్రింది complaint factsను మాత్రమే ఆధారంగా "
+                    "legal analysis చేయండి.\n\n"
+                    + text[:12000]
+                )
+            }
+        ]
+    )
+
+    return response.choices[0].message.content
+
+
+def analyse_image(image_b64, mime_type):
+
+    response = client.chat.completions.create(
+
+        model=selected_model,
+
+        temperature=0.0,
+
+        max_completion_tokens=8000,
+
+        messages=[
+            {
+                "role": "system",
+                "content": LEGAL_SYSTEM_PROMPT
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": IMAGE_INSTRUCTION
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": (
+                                f"data:{mime_type};base64,"
+                                f"{image_b64}"
+                            )
+                        }
+                    }
+                ]
+            }
+        ]
+    )
+
+    return response.choices[0].message.content
+
+
+# =========================================================
+# ANALYSE BUTTON
+# =========================================================
+
+st.markdown("---")
+
+if st.button(
+    "🔍 కేస్ విశ్లేషించి దర్యాప్తు నివేదిక రూపొందించండి",
+    type="primary",
+    use_container_width=True
+):
+
+    if not case_text.strip() and not image_data:
+
+        st.warning(
+            "దయచేసి complaint text లేదా PDF/TXT/image upload చేయండి."
+        )
+
+        st.stop()
+
+    try:
+
+        with st.spinner(
+            f"⚖️ {selected_model} ద్వారా analysis జరుగుతోంది..."
+        ):
+
+            # ---------------------------------------------
+            # IMAGE
+            # ---------------------------------------------
+
+            if image_data:
+
+                result = analyse_image(
+                    image_data,
+                    image_mime
+                )
+
+            # ---------------------------------------------
+            # TEXT / PDF / TXT
+            # ---------------------------------------------
+
+            else:
+
+                result = analyse_text(
+                    case_text
+                )
+
+        # =================================================
+        # RESULT
+        # =================================================
+
+        st.markdown("---")
+
+        st.header(
+            "📋 సమగ్ర దర్యాప్తు & చట్టపరమైన విశ్లేషణ"
+        )
+
+        st.markdown(result)
+
+        # =================================================
+        # DOWNLOAD
+        # =================================================
+
+        st.download_button(
+
+            label="📥 నివేదికను TXTగా Download చేయండి",
+
+            data=result,
+
+            file_name="BNS_Legal_Investigation_Report.txt",
+
+            mime="text/plain",
+
+            use_container_width=True
+        )
+
+    except Exception as e:
+
+        st.error(
+            f"❌ Analysisలో error వచ్చింది:\n\n{e}"
+        )
+
+        st.info(
+            "Model పేరు లేదా Groq API availabilityను "
+            "చెక్ చేయండి."
+        )
+
+
+# =========================================================
+# FOOTER
+# =========================================================
+
+st.markdown("---")
+
+st.caption(
+    "⚠️ Legal Disclaimer: ఈ application ప్రాథమిక legal "
+    "information మరియు investigation assistance కోసం మాత్రమే. "
+    "తుది నిర్ణయం కోసం అధికారిక statute, schedules, "
+    "corresponding tables మరియు న్యాయ నిపుణుల సలహాను పరిశీలించాలి."
+)
