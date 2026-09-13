@@ -4,6 +4,8 @@ from pypdf import PdfReader
 from docx import Document
 from PIL import Image
 import base64
+import fitz  # PyMuPDF for scanned/image PDFs
+from io import BytesIO
 
 
 # =========================================================
@@ -50,7 +52,6 @@ except Exception:
 # =========================================================
 
 TEXT_MODEL = "openai/gpt-oss-120b"
-
 VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 
@@ -153,27 +154,99 @@ Do NOT guess.
 
 
 # =========================================================
-# PDF TEXT EXTRACTION
+# HELPER: IMAGE TO BASE64
+# =========================================================
+
+def image_to_base64(image):
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+    buffer = BytesIO()
+    image.save(buffer, format="JPEG", quality=90)
+    return base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+
+# =========================================================
+# GROQ VISION OCR HELPER
+# =========================================================
+
+def extract_image_base64_text(image_base64):
+    try:
+        response = client.chat.completions.create(
+            model=VISION_MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": """
+ఈ complaint/report image లేదా screenshotలో ఉన్న textను 
+సాధ్యమైనంత ఖచ్చితంగా చదివి type చేయండి.
+
+IMPORTANT:
+- Textను summarize చేయవద్దు.
+- మీకు కనిపించిన text మాత్రమే ఇవ్వండి.
+- కనిపించని words ఊహించవద్దు.
+- Names, dates, places, section numbers, amounts 
+  ఉన్నట్లయితే వాటిని మార్చవద్దు.
+- Telugu text అయితే Teluguలోనే ఇవ్వండి.
+"""
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            temperature=0,
+            max_tokens=6000
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"OCR error: {e}"
+
+
+def extract_image_text(uploaded_file):
+    image = Image.open(uploaded_file)
+    img_b64 = image_to_base64(image)
+    return extract_image_base64_text(img_b64)
+
+
+# =========================================================
+# PDF TEXT EXTRACTION (SUPPORTS BOTH TEXT & SCANNED PDFs)
 # =========================================================
 
 def extract_pdf(file):
-
     text = ""
-
     try:
+        # Step 1: Try reading selectable text using pypdf
         reader = PdfReader(file)
-
         for page in reader.pages:
-
             page_text = page.extract_text()
-
             if page_text:
                 text += page_text + "\n"
+        
+        text = text.strip()
+
+        # Step 2: If no text found (Scanned PDF or Image PDF), use PyMuPDF + Groq Vision
+        if not text:
+            file.seek(0)
+            doc = fitz.open(stream=file.read(), filetype="pdf")
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                pix = page.get_pixmap(dpi=150)
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                img_b64 = image_to_base64(img)
+                
+                page_ocr = extract_image_base64_text(img_b64)
+                text += f"\n--- Page {page_num + 1} ---\n" + page_ocr + "\n"
 
         return text.strip()
 
     except Exception as e:
-
         return f"PDF extraction error: {e}"
 
 
@@ -182,130 +255,25 @@ def extract_pdf(file):
 # =========================================================
 
 def extract_docx(file):
-
     try:
-
         document = Document(file)
-
         paragraphs = []
-
         for paragraph in document.paragraphs:
-
             if paragraph.text.strip():
-
                 paragraphs.append(paragraph.text)
-
         return "\n".join(paragraphs)
-
     except Exception as e:
-
         return f"DOCX extraction error: {e}"
-
-
-# =========================================================
-# IMAGE → BASE64
-# =========================================================
-
-def image_to_base64(uploaded_file):
-
-    image = Image.open(uploaded_file)
-
-    # Convert to RGB
-    if image.mode != "RGB":
-        image = image.convert("RGB")
-
-    from io import BytesIO
-
-    buffer = BytesIO()
-
-    image.save(
-        buffer,
-        format="JPEG",
-        quality=90
-    )
-
-    return base64.b64encode(
-        buffer.getvalue()
-    ).decode("utf-8")
-
-
-# =========================================================
-# IMAGE OCR USING GROQ VISION
-# =========================================================
-
-def extract_image_text(uploaded_file):
-
-    try:
-
-        image_base64 = image_to_base64(
-            uploaded_file
-        )
-
-        response = client.chat.completions.create(
-
-            model=VISION_MODEL,
-
-            messages=[
-
-                {
-                    "role": "user",
-
-                    "content": [
-
-                        {
-                            "type": "text",
-
-                            "text": """
-ఈ complaint/report imageలో ఉన్న textను
-సాధ్యమైనంత ఖచ్చితంగా చదివి type చేయండి.
-
-IMPORTANT:
-- Textను summarize చేయవద్దు.
-- మీకు కనిపించిన text మాత్రమే ఇవ్వండి.
-- కనిపించని words ఊహించవద్దు.
-- Names, dates, places, section numbers, amounts
-  ఉన్నట్లయితే వాటిని మార్చవద్దు.
-- Telugu text అయితే Teluguలోనే ఇవ్వండి.
-"""
-                        },
-
-                        {
-                            "type": "image_url",
-
-                            "image_url": {
-                                "url":
-                                f"data:image/jpeg;base64,{image_base64}"
-                            }
-                        }
-
-                    ]
-                }
-
-            ],
-
-            temperature=0,
-
-            max_tokens=6000
-        )
-
-        return response.choices[0].message.content
-
-    except Exception as e:
-
-        return f"Image OCR error: {e}"
 
 
 # =========================================================
 # TABS
 # =========================================================
 
-tab1, tab2 = st.tabs(
-    [
-        "📝 Complaint Text",
-        "📂 Upload Document"
-    ]
-)
-
+tab1, tab2 = st.tabs([
+    "📝 Complaint Text",
+    "📂 Upload Document / Screenshot"
+])
 
 complaint_text = ""
 
@@ -315,163 +283,65 @@ complaint_text = ""
 # =========================================================
 
 with tab1:
-
     st.subheader("📝 Complaint / Report Text")
-
     text_input = st.text_area(
         "Complaint details ఇక్కడ paste చేయండి",
         height=350,
         placeholder="ఫిర్యాదు / రిపోర్టు వివరాలను ఇక్కడ paste చేయండి..."
     )
-
     if text_input.strip():
-
         complaint_text = text_input
 
 
 # =========================================================
-# TAB 2 - DOCUMENT UPLOAD
+# TAB 2 - DOCUMENT UPLOAD (PDF, DOCX, TXT, Images, Screenshots)
 # =========================================================
 
 with tab2:
-
-    st.subheader("📂 Upload Complaint / Report")
-
+    st.subheader("📂 Upload Complaint / Screenshot / PDF")
     st.write(
-        "క్రింది boxపై click చేసి complaint file select చేయండి."
+        "క్రింది boxపై click చేసి ఫైల్ లేదా స్క్రీన్ షాట్ (JPG, PNG, PDF, DOCX) select చేయండి."
     )
 
     uploaded_file = st.file_uploader(
-
-        "Upload Document",
-
-        type=[
-            "pdf",
-            "docx",
-            "txt",
-            "jpg",
-            "jpeg",
-            "png"
-        ],
-
+        "Upload Document / Screenshot",
+        type=["pdf", "docx", "txt", "jpg", "jpeg", "png"],
         key="complaint_upload"
     )
 
-
     if uploaded_file is not None:
-
-        st.success(
-            f"✅ Uploaded: {uploaded_file.name}"
-        )
-
-
+        st.success(f"✅ Uploaded: {uploaded_file.name}")
         file_name = uploaded_file.name.lower()
 
-
-        # -------------------------------------------------
         # TXT
-        # -------------------------------------------------
-
         if file_name.endswith(".txt"):
-
             try:
-
-                complaint_text = (
-                    uploaded_file
-                    .read()
-                    .decode(
-                        "utf-8",
-                        errors="ignore"
-                    )
-                )
-
-                st.text_area(
-                    "Extracted Text",
-                    complaint_text,
-                    height=350
-                )
-
+                complaint_text = uploaded_file.read().decode("utf-8", errors="ignore")
+                st.text_area("Extracted Text", complaint_text, height=350)
             except Exception as e:
+                st.error(f"TXT reading error: {e}")
 
-                st.error(
-                    f"TXT reading error: {e}"
-                )
-
-
-        # -------------------------------------------------
-        # PDF
-        # -------------------------------------------------
-
+        # PDF (Text or Scanned)
         elif file_name.endswith(".pdf"):
-
-            complaint_text = extract_pdf(
-                uploaded_file
-            )
-
+            with st.spinner("PDF నుండి text చదువుతున్నాను (Scanned అయితే OCR ఉపయోగిస్తున్నాను)..."):
+                complaint_text = extract_pdf(uploaded_file)
             if complaint_text:
-
-                st.text_area(
-                    "Extracted PDF Text",
-                    complaint_text,
-                    height=350
-                )
-
+                st.text_area("Extracted PDF Text", complaint_text, height=350)
             else:
+                st.warning("PDFలో ఎలాంటి text గుర్తించబడలేదు.")
 
-                st.warning(
-                    "PDFలో selectable text కనిపించలేదు. "
-                    "ఇది scanned PDF అయితే JPG/PNGగా upload చేయండి."
-                )
-
-
-        # -------------------------------------------------
         # DOCX
-        # -------------------------------------------------
-
         elif file_name.endswith(".docx"):
+            complaint_text = extract_docx(uploaded_file)
+            st.text_area("Extracted DOCX Text", complaint_text, height=350)
 
-            complaint_text = extract_docx(
-                uploaded_file
-            )
-
-            st.text_area(
-                "Extracted DOCX Text",
-                complaint_text,
-                height=350
-            )
-
-
-        # -------------------------------------------------
-        # JPG / JPEG / PNG
-        # -------------------------------------------------
-
-        elif file_name.endswith(
-            (".jpg", ".jpeg", ".png")
-        ):
-
-            st.image(
-                uploaded_file,
-                caption="Uploaded Complaint",
-                use_container_width=True
-            )
-
-            with st.spinner(
-                "Imageలో ఉన్న complaint text చదువుతున్నాను..."
-            ):
-
-                complaint_text = extract_image_text(
-                    uploaded_file
-                )
-
-            st.subheader(
-                "📝 Extracted Complaint Text"
-            )
-
-            st.text_area(
-                "OCR Text",
-                complaint_text,
-                height=350
-            )
+        # JPG / JPEG / PNG (Screenshots / Images)
+        elif file_name.endswith((".jpg", ".jpeg", ".png")):
+            st.image(uploaded_file, caption="Uploaded Screenshot / Image", use_container_width=True)
+            with st.spinner("Screenshot / Image లో ఉన్న text చదువుతున్నాను..."):
+                complaint_text = extract_image_text(uploaded_file)
+            st.subheader("📝 Extracted Text from Screenshot")
+            st.text_area("OCR Text", complaint_text, height=350)
 
 
 # =========================================================
@@ -488,24 +358,16 @@ analyze_button = st.button(
 
 
 # =========================================================
-# LEGAL ANALYSIS
+# LEGAL ANALYSIS EXECUTION
 # =========================================================
 
 if analyze_button:
-
     if not complaint_text.strip():
-
-        st.error(
-            "ముందుగా Complaint Text ఇవ్వండి లేదా Document upload చేయండి."
-        )
-
+        st.error("ముందుగా Complaint Text ఇవ్వండి లేదా Document / Screenshot upload చేయండి.")
     else:
-
         complaint_text = complaint_text[:60000]
 
-
         user_prompt = f"""
-
 క్రింద ఉన్న complaint/report ఆధారంగా మాత్రమే
 FIR legal analysis చేయండి.
 
@@ -523,74 +385,39 @@ COMPLAINT / REPORT
 Teluguలో detailed preliminary FIR analysis ఇవ్వండి.
 """
 
-
-        with st.spinner(
-            "⚖️ Legal ingredients మరియు possible BNS sections పరిశీలిస్తున్నాను..."
-        ):
-
+        with st.spinner("⚖️ Legal ingredients మరియు possible BNS sections పరిశీలిస్తున్నాను..."):
             try:
-
                 response = client.chat.completions.create(
-
                     model=TEXT_MODEL,
-
                     messages=[
-
                         {
                             "role": "system",
                             "content": SYSTEM_PROMPT
                         },
-
                         {
                             "role": "user",
                             "content": user_prompt
                         }
-
                     ],
-
                     temperature=0,
-
                     max_tokens=7000
                 )
 
+                result = response.choices[0].message.content
 
-                result = (
-                    response
-                    .choices[0]
-                    .message
-                    .content
-                )
-
-
-                st.success(
-                    "✅ Legal analysis పూర్తయింది."
-                )
-
-
+                st.success("✅ Legal analysis పూర్తయింది.")
                 st.markdown(result)
 
-
-                # -------------------------------------------------
                 # DOWNLOAD RESULT
-                # -------------------------------------------------
-
                 st.download_button(
-
                     "📥 Download Analysis",
-
                     data=result,
-
                     file_name="FIR_Legal_Analysis.txt",
-
                     mime="text/plain"
                 )
 
-
             except Exception as e:
-
-                st.error(
-                    f"Groq API Error: {str(e)}"
-                )
+                st.error(f"Groq API Error: {str(e)}")
 
 
 # =========================================================
@@ -598,9 +425,8 @@ Teluguలో detailed preliminary FIR analysis ఇవ్వండి.
 # =========================================================
 
 st.markdown("---")
-
 st.caption(
     "⚠️ AI-assisted preliminary legal analysis only. "
     "Final FIR registration and applicable sections must be "
     "verified with the current statutory text and case facts."
-        )
+)
