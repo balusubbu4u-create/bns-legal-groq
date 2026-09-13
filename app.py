@@ -42,22 +42,11 @@ except Exception:
 
 
 # =========================================================
-# MODELS & SIDEBAR CONFIGURATION
+# MODELS (Using updated active Groq models)
 # =========================================================
 
-st.sidebar.subheader("⚙️ Model Configuration")
-TEXT_MODEL = st.sidebar.selectbox(
-    "Select Text Model",
-    [
-        "llama-3.1-70b-versatile",
-        "llama3-70b-8192",
-        "llama-3.1-8b-instant",
-    ],
-    index=0,
-)
-VISION_MODEL = st.sidebar.selectbox(
-    "Select Vision Model", ["llama-3.2-11b-vision-preview"], index=0
-)
+TEXT_MODEL = "llama-3.3-70b-versatile"
+VISION_MODEL = "llama-3.2-11b-vision-preview"
 
 
 # =========================================================
@@ -190,6 +179,7 @@ if uploaded_file is not None:
     except Exception as e:
       st.error(f"Error loading image: {e}")
 
+# Combine text sources cleanly
 final_complaint_content = (
     complaint_text_input.strip() if complaint_text_input else extracted_text
 )
@@ -197,7 +187,7 @@ final_complaint_content = (
 if st.button("🔍 Analyze Complaint", type="primary"):
   if not final_complaint_content and not uploaded_images:
     st.warning(
-        "தயவுசெய்து complaint text ఇవ్వండి లేదా document/image upload చేయండి."
+        "தயవుசெய்து complaint text ఇవ్వండి లేదా document/image upload చేయండి."
     )
   else:
     with st.spinner("Analyzing complaint facts against BNS/BNSS/BSA..."):
