@@ -42,11 +42,22 @@ except Exception:
 
 
 # =========================================================
-# MODELS
+# MODELS & SIDEBAR CONFIGURATION
 # =========================================================
 
-TEXT_MODEL = "llama-3.3-70b-versatile"
-VISION_MODEL = "llama-3.2-11b-vision-preview"
+st.sidebar.subheader("⚙️ Model Configuration")
+TEXT_MODEL = st.sidebar.selectbox(
+    "Select Text Model",
+    [
+        "llama-3.1-70b-versatile",
+        "llama3-70b-8192",
+        "llama-3.1-8b-instant",
+    ],
+    index=0,
+)
+VISION_MODEL = st.sidebar.selectbox(
+    "Select Vision Model", ["llama-3.2-11b-vision-preview"], index=0
+)
 
 
 # =========================================================
@@ -120,13 +131,11 @@ def extract_text_from_docx(uploaded_file):
 
 
 def extract_text_from_scanned_pdf(uploaded_file):
-  # Fallback using PyMuPDF (fitz) to extract text or images from scanned PDFs
   doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
   text = ""
   images = []
   for page in doc:
     text += page.get_text()
-    # Check if page has images
     image_list = page.get_images(full=True)
     for img in image_list:
       xref = img[0]
@@ -163,7 +172,6 @@ if uploaded_file is not None:
     try:
       extracted_text = extract_text_from_pdf(uploaded_file)
       if not extracted_text.strip():
-        # Scanned PDF fallback
         uploaded_file.seek(0)
         extracted_text, uploaded_images = extract_text_from_scanned_pdf(
             uploaded_file
@@ -182,11 +190,8 @@ if uploaded_file is not None:
     except Exception as e:
       st.error(f"Error loading image: {e}")
 
-# Combine text sources
-final_complaint_content = complaint_text_ind = (
-    complaint_text_input.strip()
-    if complaint_text_input
-    else extracted_text
+final_complaint_content = (
+    complaint_text_input.strip() if complaint_text_input else extracted_text
 )
 
 if st.button("🔍 Analyze Complaint", type="primary"):
@@ -198,7 +203,6 @@ if st.button("🔍 Analyze Complaint", type="primary"):
     with st.spinner("Analyzing complaint facts against BNS/BNSS/BSA..."):
       try:
         if uploaded_images and not final_complaint_content:
-          # Vision model handling
           buffered = BytesIO()
           uploaded_images[0].save(buffered, format="JPEG")
           img_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
@@ -231,7 +235,6 @@ if st.button("🔍 Analyze Complaint", type="primary"):
               temperature=0.1,
           )
         else:
-          # Text model handling
           prompt = f"""
           Please analyze the following complaint/FIR text strictly based on the system guidelines:
           
