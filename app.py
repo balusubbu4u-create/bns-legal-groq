@@ -1,206 +1,165 @@
 import streamlit as st
 from groq import Groq
 from pypdf import PdfReader
-from docx import Document
-from PIL import Image
-import base64
-import fitz
-from io import BytesIO
-
-# =========================================================
-# PAGE SETTINGS
-# =========================================================
 
 st.set_page_config(
-    page_title="BNS FIR Legal Assistant",
+    page_title="BNS Legal Assistant",
     page_icon="⚖️",
     layout="wide"
 )
 
-st.title("⚖️ BNS / BNSS / BSA FIR Legal Assistant")
+st.title("⚖️ BNS, BNSS & BSA లీగల్ & దర్యాప్తు అసిస్టెంట్")
+st.caption("భారతీయ క్రిమినల్ చట్టాలు (BNS, BNSS, BSA) & పాత చట్టాల (IPC, CrPC, IEA) సమగ్ర విశ్లేషణ")
 
-st.caption(
-    "Complaint facts ఆధారంగా preliminary legal analysis కోసం."
-)
-
-st.warning(
-    "⚠️ ఇది AI-assisted preliminary analysis మాత్రమే. "
-    "FIRలో sections నమోదు చేసే ముందు అధికారిక BNS/BNSS/BSA text, "
-    "complaint facts మరియు evidence ఆధారంగా verification చేయాలి."
-)
-
-# =========================================================
-# GROQ API
-# =========================================================
-
-try:
-    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
-    client = Groq(api_key=GROQ_API_KEY)
-except Exception:
-    st.error(
-        "GROQ_API_KEY కనిపించలేదు. "
-        "Streamlit → Settings → Secretsలో GROQ_API_KEY set చేయండి."
-    )
+# Streamlit Secrets నుండి API Key పొందడం
+if "GROQ_API_KEY" not in st.secrets:
+    st.error("Streamlit Secrets లో 'GROQ_API_KEY' కనిపించలేదు. దయచేసి App Settings -> Secrets లో నమోదు చేయండి.")
     st.stop()
 
-# =========================================================
-# MODELS
-# =========================================================
+api_key = st.secrets["GROQ_API_KEY"]
 
-TEXT_MODEL = "llama-3.3-70b-versatile"
-VISION_MODEL = "llama-3.2-11b-vision-preview"
+# సైడ్‌బార్‌లో లైవ్ మోడల్ వెర్షన్లను పొందడం
+st.sidebar.header("⚙️ మోడల్ సెట్టింగ్స్")
 
-# =========================================================
-# LEGAL SYSTEM PROMPT
-# =========================================================
+@st.cache_data(ttl=3600)
+def get_available_groq_models(key):
+    try:
+        client = Groq(api_key=key)
+        models_data = client.models.list().data
+        # ఆడియో, గార్డ్ మోడల్స్ కాకుండా టెక్స్ట్ మోడల్స్ మాత్రమే
+        chat_models = [
+            m.id for m in models_data 
+            if "whisper" not in m.id and "guard" not in m.id
+        ]
+        # Llama మోడల్స్‌ను ముందు వరుసలో ఉంచడం
+        chat_models.sort(key=lambda x: ("llama" in x.lower() or "gemma" in x.lower()), reverse=True)
+        return chat_models
+    except Exception:
+        return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 
-SYSTEM_PROMPT = """You are a highly cautious Indian criminal-law FIR analysis assistant.
+available_models = get_available_groq_models(api_key)
 
-Analyze complaints under:
-- Bharatiya Nyaya Sanhita, 2023 (BNS)
-- Bharatiya Nagarik Suraksha Sanhita, 2023 (BNSS)
-- Bharatiya Sakshya Adhiniyam, 2023 (BSA)
-
-VERY IMPORTANT:
-1. NEVER invent a section number.
-2. Do not assume that every allegation automatically constitutes an offence.
-3. Use ONLY facts present in the complaint.
-4. Do not add facts which are not stated.
-5. Separate:
-   - Alleged facts
-   - Legal ingredients
-   - Facts supporting the ingredient
-   - Missing facts
-   - Evidence required
-   - Possible section
-   - Verification required
-6. If the facts are insufficient, clearly say: "Further verification required."
-7. For BNS Section 85, carefully check whether the facts satisfy the statutory meaning of cruelty under Section 86.
-8. A salary/money dispute should NOT automatically be treated as dowry/property demand or cruelty.
-9. A threat to kill should be examined separately as criminal intimidation. Verify the exact threat, circumstances and intention to cause alarm.
-10. A husband living with another woman should not automatically be treated as a criminal offence. Analyze only what is actually alleged.
-11. Do not fabricate judgments, case laws, circulars or government orders."""
-
-# =========================================================
-# HELPER FUNCTIONS FOR FILE PROCESSING
-# =========================================================
-
-def extract_text_from_docx(uploaded_file):
-    doc = Document(uploaded_file)
-    return "\n".join([para.text for para in doc.paragraphs])
-
-def extract_text_from_pdf(uploaded_file):
-    reader = PdfReader(uploaded_file)
-    text = ""
-    for page in reader.pages:
-        t = page.extract_text()
-        if t:
-            text += t + "\n"
-    
-    if len(text.strip()) < 50:
-        st.info("📷 Scanned / Image PDF గుర్తించబడింది. PyMuPDF (fitz) ద్వారా Image processing జరుగుతోంది...")
-        uploaded_file.seek(0)
-        doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-        images = []
-        for page_num in range(len(doc)):
-            page = doc[page_num]
-            pix = page.get_pixmap(dpi=150)
-            img = Image.open(BytesIO(pix.tobytes("png")))
-            images.append(img)
-        return images
-    
-    return text
-
-# =========================================================
-# USER INTERFACE & INPUT
-# =========================================================
-
-uploaded_file = st.file_uploader(
-    "ఫిర్యాదు పత్రాన్ని (PDF, Word, or Image) అప్లోడ్ చేయండి:",
-    type=["pdf", "docx", "txt", "png", "jpg", "jpeg"]
+selected_model = st.sidebar.selectbox(
+    "🤖 Groq AI Model వెర్షన్ ఎంచుకోండి:",
+    options=available_models,
+    index=0,
+    help="మీ Groq ఖాతాలో లైవ్‌గా పనిచేసే మోడల్స్ ఇక్కడ కనిపిస్తాయి."
 )
 
-manual_text = st.text_area(
-    "లేదా ఫిర్యాదు వివరాలను (Complaint facts) ఇక్కడ టైప్ చేయండి లేదా పేస్ట్ చేయండి:"
-)
+st.sidebar.markdown("---")
+st.sidebar.markdown("""
+**కవర్ చేయబడే అంశాలు:**
+- 🔹 BNS vs IPC సెక్షన్లు
+- 🔹 BNSS vs CrPC దర్యాప్తు విధానం
+- 🔹 BSA vs IEA ఎలక్ట్రానిక్/ఫోరెన్సిక్ సాక్ష్యాలు
+- 🔹 IO సమగ్ర యాక్షన్ చెక్‌లిస్ట్
+""")
 
-analyze_btn = st.button("⚖️ Analyze Complaint", type="primary")
+tab1, tab2 = st.tabs(["📝 టెక్స్ట్ వివరాలు", "📁 PDF / Text ఫైల్ అప్‌లోడ్"])
 
-# =========================================================
-# ANALYSIS LOGIC
-# =========================================================
+case_text = ""
 
-if analyze_btn:
-    complaint_content = ""
-    image_contents = []
+with tab1:
+    text_input = st.text_area(
+        "ఫిర్యాదు వివరాలు ఇక్కడ నమోదు చేయండి:",
+        height=180,
+        placeholder="ఉదాహరణ: అర్ధరాత్రి ఇంట్లోకి అక్రమంగా ప్రవేశించి బంగారు నగలు, నగదు దోచుకెళ్లారు. బాధితులపై దాడి చేసి బెదిరించారు..."
+    )
+    if text_input:
+        case_text = text_input
 
-    if uploaded_file is not None:
-        file_extension = uploaded_file.name.split(".")[-1].lower()
-        
-        if file_extension in ["png", "jpg", "jpeg"]:
-            image = Image.open(uploaded_file)
-            image_contents.append(image)
-            complaint_content = "Please analyze the attached image/screenshot of the complaint."
-            
-        elif file_extension == "docx":
-            complaint_content = extract_text_from_docx(uploaded_file)
-            
-        elif file_extension == "pdf":
-            result = extract_text_from_pdf(uploaded_file)
-            if isinstance(result, list):
-                image_contents = result
-                complaint_content = "Please analyze the attached scanned PDF pages of the complaint."
-            else:
-                complaint_content = result
-                
-        elif file_extension == "txt":
-            complaint_content = str(uploaded_file.read(), "utf-8")
-
-    if manual_text.strip():
-        if complaint_content:
-            complaint_content += "\n\n" + manual_text
-        else:
-            complaint_content = manual_text
-
-    if not complaint_content.strip() and not image_contents:
-        st.error("தயவுசெய்து ఏదైనా ఫైల్ అప్లోడ్ చేయండి లేదా కింద టెక్స్ట్ రాయండి.")
-    else:
-        with st.spinner("Legal analysis జరుగుతోంది... దయచేసి వేచి ఉండండి."):
+with tab2:
+    uploaded_file = st.file_uploader(
+        "ఫిర్యాదు PDF లేదా TXT ఫైల్ ఎంచుకోండి",
+        type=["pdf", "txt"]
+    )
+    if uploaded_file:
+        if uploaded_file.type == "application/pdf":
             try:
-                if image_contents:
-                    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-                    
-                    user_content = [{"type": "text", "text": complaint_content}]
-                    for img in image_contents:
-                        buffered = BytesIO()
-                        img.save(buffered, format="PNG")
-                        img_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
-                        user_content.append({
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{img_base64}"}
-                        })
-                    
-                    messages.append({"role": "user", "content": user_content})
-                    
-                    response = client.chat.completions.create(
-                        model=VISION_MODEL,
-                        messages=messages,
-                        temperature=0.1
-                    )
-                else:
-                    response = client.chat.completions.create(
-                        model=TEXT_MODEL,
-                        messages=[
-                            {"role": "system", "content": SYSTEM_PROMPT},
-                            {"role": "user", "content": f"Here is the complaint text for analysis:\n\n{complaint_content}"}
-                        ],
-                        temperature=0.1
-                    )
+                reader = PdfReader(uploaded_file)
+                extracted_text = ""
+                for page in reader.pages:
+                    text = page.extract_text()
+                    if text:
+                        extracted_text += text + "\n"
+                case_text = extracted_text
+                st.success(f"✅ PDF ఫైల్ విజయవంతంగా లోడ్ అయింది: {uploaded_file.name}")
+            except Exception as pdf_err:
+                st.error(f"PDF చదవడంలో లోపం: {pdf_err}")
+        elif uploaded_file.type == "text/plain":
+            case_text = uploaded_file.getvalue().decode("utf-8")
+            st.success(f"✅ Text ఫైల్ లోడ్ అయింది: {uploaded_file.name}")
 
-                analysis_result = response.choices[0].message.content
-                
-                st.subheader("📋 Preliminary Legal Analysis Report")
-                st.markdown(analysis_result)
+# దర్యాప్తు విధానం మరియు సెక్షన్ల సమగ్ర విశ్లేషణ ప్రాంప్ట్
+legal_system_instruction = """
+మీరు భారతీయ క్రిమినల్ చట్టాలు (Bharatiya Nyaya Sanhita - BNS, Bharatiya Nagarik Suraksha Sanhita - BNSS, Bharatiya Sakshya Adhiniyam - BSA) మరియు వాటి పాత చట్టాలైన IPC, CrPC, Indian Evidence Act (IEA) లపై అత్యున్నత ప్రావీణ్యం ఉన్న అధికారిక లీగల్ & ఇన్వెస్టిగేషన్ స్పెషలిస్ట్.
+
+ఖచ్చితమైన నియమాలు:
+1. ప్రతి లీగల్ సెక్షన్‌కు కొత్త చట్టం (BNS/BNSS/BSA) మరియు పాత చట్టం (IPC/CrPC/IEA) పక్కపక్కనే స్పష్టంగా రాయాలి. (ఉదా: BNS Section 303 / IPC Section 379).
+2. 'దర్యాప్తు విధానం' (Investigation Procedure) లో కేవలం పైపైన కాకుండా, పోలీసు అధికారి (IO) మొదటి నుండి చివరి వరకు పాటించాల్సిన స్టాండర్డ్ ఆపరేటింగ్ ప్రొసీజర్ (SOP) ను దశలవారీగా పేర్కొనాలి.
+3. మొత్తం నివేదిక స్పష్టమైన తెలుగులో, పాయింట్ల రూపంలో ఉండాలి.
+
+క్రింది క్రమంలో మాత్రమే సమగ్ర నివేదిక రూపొందించాలి:
+
+### 1. వర్తించే సెక్షన్లు & శిక్షల వివరాలు (BNS vs IPC)
+- ఫిర్యాదులోని అంశాలకు వర్తించే ప్రతి నేరానికి BNS Section మరియు పాత IPC Section.
+- ఆయా సెక్షన్లకు నిర్దేశించిన గరిష్ట శిక్ష మరియు జరిమానా.
+- నేరాల స్వభావం (Cognizable / Non-Cognizable, Bailable / Non-Bailable).
+
+### 2. దర్యాప్తు విధానం & చట్టపరమైన ప్రక్రియ (BNSS vs CrPC SOP)
+- **ఎఫ్‌ఐఆర్ నమోదు & ప్రిలిమినరీ విచారణ:** BNSS 173 (పాత CrPC 154) నిబంధనలు.
+- **నోటీసులు & హాజరు:** 7 సంవత్సరాల లోపు శిక్ష పడే కేసుల్లో BNSS 35(3) (పాత CrPC 41A) నోటీసు విధానం.
+- **అరెస్ట్ & రిమాండ్ నిబంధనలు:** BNSS సెక్షన్లు, సమాచార హక్కులు, 24 గంటల మెజిస్ట్రేట్ హాజరు, పోలీస్/జ్యుడీషియల్ కస్టడీ గరిష్ట పరిమితులు (BNSS 187).
+- **శోధన & స్వాధీనం (Search & Seizure):** BNSS 105 ప్రకారం ఆడియో-వీడియో రికార్డింగ్ నిబంధన, పంచనామా విధానం.
+- **కాలపరిమితులు (Timelines):** దర్యాప్తు పూర్తి, మెడికల్ రిపోర్టులు, మరియు చార్జ్‌షీట్ దాఖలు గడువులు (60/90 రోజులు).
+
+### 3. సాక్ష్యాధారాల సేకరణ & ఫోరెన్సిక్ మార్గదర్శకాలు (BSA vs IEA)
+- సంఘటనా స్థలం పరిశీలన, క్రైమ్ సీన్ ఫోటోగ్రఫీ/వీడియోగ్రఫీ నిబంధనలు.
+- డిజిటల్ & ఎలక్ట్రానిక్ సాక్ష్యాల గుర్తింపు: BSA Section 63 సర్టిఫికేషన్ (పాత 65B సర్టిఫికెట్ స్థానంలో).
+- 7 ఏళ్లు పైబడిన శిక్ష పడే తీవ్ర నేరాలకు ఫోరెన్సిక్ నిపుణుల తప్పనిసరి విజిట్ (BNSS 176(3)).
+
+### 4. దర్యాప్తు అధికారి (IO) సమగ్ర యాక్షన్ చెక్‌లిస్ట్
+- [ ] వెంటనే చేయాల్సిన 5 అత్యవసర చర్యలు.
+- [ ] సేకరించాల్సిన డాక్యుమెంట్లు, స్టేట్‌మెంట్లు (BNSS 180 / CrPC 161).
+- [ ] సాంకేతిక ఆధారాల సేకరణ (CDR, CCTV, మొబైల్ డాటా).
+
+చివరలో తప్పనిసరిగా:
+"గమనిక: ఇది ప్రాథమిక సమాచారం మరియు దర్యాప్తు మార్గదర్శకత్వం కోసం మాత్రమే; తుది చట్టపరమైన నిర్ణయాల కోసం న్యాయ నిపుణులను సంప్రదించాలి." అని రాయండి.
+"""
+
+if st.button("🔍 కేస్ విశ్లేషించి దర్యాప్తు నివేదిక రూపొందించండి", type="primary"):
+    if not case_text.strip():
+        st.warning("దయచేసి ఫిర్యాదు వివరాలను నమోదు చేయండి లేదా ఫైల్ అప్‌లోడ్ చేయండి.")
+    else:
+        # కంటెక్స్ట్ విండో దాటకుండా ఉండటానికి మొదటి 2500 అక్షరాలు
+        trimmed_case_text = case_text[:2500]
+
+        with st.spinner(f"AI మోడల్ ({selected_model}) ద్వారా దర్యాప్తు విధానాలు మరియు సెక్షన్ల పరిశీలన జరుగుతోంది..."):
+            try:
+                client = Groq(api_key=api_key)
+
+                response = client.chat.completions.create(
+                    model=selected_model,
+                    temperature=0.1,
+                    messages=[
+                        {"role": "system", "content": legal_system_instruction},
+                        {"role": "user", "content": f"కేసు ఫిర్యాదు పూర్తి వివరాలు:\n{trimmed_case_text}"}
+                    ]
+                )
+
+                result = response.choices[0].message.content
+
+                if result:
+                    st.markdown("---")
+                    st.markdown("## 📋 సమగ్ర దర్యాప్తు & చట్టపరమైన విశ్లేషణ నివేదిక")
+                    st.markdown(result)
+
+                    st.download_button(
+                        label="📥 నివేదికను ఫైల్‌గా డౌన్‌లోడ్ చేయండి (TXT)",
+                        data=result,
+                        file_name="BNS_Investigation_Report.txt",
+                        mime="text/plain"
+                    )
 
             except Exception as e:
-                st.error(f"విశ్లేషణలో లోపం (Error): {e}")
+                st.error(f"విశ్లేషణలో లోపం ఏర్పడింది: {e}")
