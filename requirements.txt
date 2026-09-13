@@ -1,6 +1,5 @@
-streamlit>=1.37.0
-groq>=0.11.0
+streamlit
+groq
+pillow
 pypdf
-python-docx
-Pillow
-PyMuPDF
+pytesseract
