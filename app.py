@@ -42,10 +42,10 @@ except Exception:
 
 
 # =========================================================
-# MODELS
+# MODELS (Using updated active Groq models)
 # =========================================================
 
-TEXT_MODEL = "openai/gpt-oss-120b"
+TEXT_MODEL = "llama-3.3-70b-versatile"
 VISION_MODEL = "llama-3.2-11b-vision-preview"
 
 
@@ -193,8 +193,15 @@ if st.button("🔍 Analyze Complaint", type="primary"):
     with st.spinner("Analyzing complaint facts against BNS/BNSS/BSA..."):
       try:
         if uploaded_images and not final_complaint_content:
+          img = uploaded_images[0]
+          # Convert RGBA/Palette images to RGB to prevent JPEG saving errors
+          if img.mode in ("RGBA", "LA") or (
+              img.mode == "P" and "transparency" in img.info
+          ):
+            img = img.convert("RGB")
+
           buffered = BytesIO()
-          uploaded_images[0].save(buffered, format="JPEG")
+          img.save(buffered, format="JPEG")
           img_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
 
           chat_completion = client.chat.completions.create(
