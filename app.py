@@ -60,7 +60,7 @@ def investigate_case(police_query: str, client_obj):
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": police_query}
             ],
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",  # <--- మోడల్ పేరు అప్‌డేట్ చేయబడింది
             temperature=0.2,
             max_tokens=2500
         )
@@ -72,7 +72,6 @@ def investigate_case(police_query: str, client_obj):
 st.subheader("📁 కేసు డాక్యుమెంట్ లేదా ఫిర్యాదు అప్‌లోడ్ చేయండి")
 uploaded_file = st.file_uploader("ఫైల్‌ను ఎంచుకోండి (PDF, TXT, JPG, PNG)", type=["pdf", "txt", "jpg", "png", "jpeg"])
 
-# ఒకవేళ టెక్స్ట్ ఫైల్ లేదా సాధారణ సమాచారం ఉంటే చదవడం కోసం
 file_content = ""
 if uploaded_file is not None:
     st.success(f"ఫైల్ విజయవంతంగా అప్‌లోడ్ అయింది: {uploaded_file.name}")
@@ -83,7 +82,6 @@ default_query = """బాధితుడి ఇంటి తాళాలు ప�
 బాధితుడు ఊర్లో లేడు, వాట్సాప్ లో మెసేజ్ ద్వారా సమాచారం పంపాడు. 
 దీనికి సెక్షన్లు, శిక్ష, బెయిల్, రికవరీ, డిజిటల్ ఎవిడెన్స్ మరియు చార్జిషీట్ వరకు SOP వివరాలు ఇవ్వండి."""
 
-# ఒకవేళ ఫైల్ నుండి టెక్స్ట్ వస్తే దాన్ని డీఫాల్ట్ క్వెరీగా సెట్ చేయవచ్చు
 initial_text = file_content if file_content else default_query
 user_query = st.text_area("లేదా కేసు వివరాలు ఇక్కడ టైప్ చేయండి:", value=initial_text, height=150)
 
