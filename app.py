@@ -1,7 +1,6 @@
-import io
 import os
 import re
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 import streamlit as st
 from PIL import Image
@@ -19,7 +18,9 @@ st.set_page_config(
 )
 
 st.title("⚖️ పోలీస్ లీగల్ & ఇన్వెస్టిగేషన్ అసిస్టెంట్")
-st.caption("BNS / BNSS / BSA + IPC / CrPC / Indian Evidence Act – Date Based Legal Analysis")
+st.caption(
+    "BNS / BNSS / BSA + IPC / CrPC / Indian Evidence Act"
+)
 
 
 # =========================================================
@@ -38,10 +39,11 @@ try:
 except Exception:
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
+
 if not GROQ_API_KEY:
     st.error(
-        "GROQ_API_KEY కనబడలేదు.\n\n"
-        "Streamlit → Settings / Secrets లో GROQ_API_KEY పెట్టండి."
+        "❌ GROQ_API_KEY కనబడలేదు.\n\n"
+        "Streamlit → Settings → Secrets లో GROQ_API_KEY పెట్టండి."
     )
     st.stop()
 
@@ -52,10 +54,15 @@ if not GROQ_API_KEY:
 
 try:
     client = Groq(api_key=GROQ_API_KEY)
+
 except Exception as e:
     st.error(f"Groq client ప్రారంభించలేకపోయింది: {e}")
     st.stop()
 
+
+# =========================================================
+# MODEL
+# =========================================================
 
 MODEL_NAME = "openai/gpt-oss-120b"
 
@@ -66,7 +73,9 @@ MODEL_NAME = "openai/gpt-oss-120b"
 
 try:
     from pypdf import PdfReader
+
     PDF_AVAILABLE = True
+
 except Exception:
     PDF_AVAILABLE = False
 
@@ -77,84 +86,685 @@ except Exception:
 
 try:
     import pytesseract
+
     OCR_AVAILABLE = True
+
 except Exception:
     OCR_AVAILABLE = False
 
 
 # =========================================================
-# DATE EXTRACTION FUNCTIONS
+# TELUGU MONTHS
+# =========================================================
+
+TELUGU_MONTHS = {
+
+    "జనవరి": 1,
+
+    "ఫిబ్రవరి": 2,
+
+    "మార్చి": 3,
+
+    "ఏప్రిల్": 4,
+
+    "మే": 5,
+
+    "జూన్": 6,
+
+    "జూలై": 7,
+
+    "ఆగస్టు": 8,
+
+    "సెప్టెంబర్": 9,
+    "సెప్టెంబరు": 9,
+
+    "అక్టోబర్": 10,
+    "అక్టోబరు": 10,
+
+    "నవంబర్": 11,
+    "నవంబరు": 11,
+
+    "డిసెంబర్": 12,
+    "డిసెంబరు": 12,
+}
+
+
+# =========================================================
+# ENGLISH MONTHS
+# =========================================================
+
+ENGLISH_MONTHS = {
+
+    "january": 1,
+    "jan": 1,
+
+    "february": 2,
+    "feb": 2,
+
+    "march": 3,
+    "mar": 3,
+
+    "april": 4,
+    "apr": 4,
+
+    "may": 5,
+
+    "june": 6,
+    "jun": 6,
+
+    "july": 7,
+    "jul": 7,
+
+    "august": 8,
+    "aug": 8,
+
+    "september": 9,
+    "sep": 9,
+    "sept": 9,
+
+    "october": 10,
+    "oct": 10,
+
+    "november": 11,
+    "nov": 11,
+
+    "december": 12,
+    "dec": 12,
+}
+
+
+# =========================================================
+# NUMERIC DATE PARSER
 # =========================================================
 
 def parse_date_string(value):
     """
-    Convert common Indian date formats into datetime.date.
+    Supports:
+
+    10-09-2026
+    10/09/2026
+    10.09.2026
+    2026-09-10
+    10-09-26
     """
 
     if not value:
         return None
 
-    value = value.strip()
+    value = str(value).strip()
 
     formats = [
+
         "%d-%m-%Y",
         "%d/%m/%Y",
         "%d.%m.%Y",
+
         "%Y-%m-%d",
         "%Y/%m/%d",
+        "%Y.%m.%d",
+
         "%d-%m-%y",
         "%d/%m/%y",
         "%d.%m.%y",
     ]
 
     for fmt in formats:
+
         try:
-            return datetime.strptime(value, fmt).date()
+            return datetime.strptime(
+                value,
+                fmt
+            ).date()
+
         except ValueError:
-            pass
+            continue
 
     return None
 
 
-def extract_incident_date(text):
+# =========================================================
+# NAMED MONTH DATE PARSER
+# =========================================================
+
+def parse_named_month_date(text):
+
+    if not text:
+        return None
+
+    text = str(text).strip()
+
+
+    # -----------------------------------------------------
+    # TELUGU
+    #
+    # 10 సెప్టెంబర్ 2026
+    # 10 సెప్టెంబరు 2026
+    # -----------------------------------------------------
+
+    for month_name, month_number in TELUGU_MONTHS.items():
+
+        pattern = (
+            rf"(\d{{1,2}})"
+            rf"\s*"
+            rf"{re.escape(month_name)}"
+            rf"\s*"
+            rf"(\d{{4}})"
+        )
+
+        match = re.search(
+            pattern,
+            text
+        )
+
+        if match:
+
+            day = int(match.group(1))
+            year = int(match.group(2))
+
+            try:
+
+                return date(
+                    year,
+                    month_number,
+                    day
+                )
+
+            except ValueError:
+
+                return None
+
+
+    # -----------------------------------------------------
+    # ENGLISH
+    #
+    # 10 September 2026
+    # 10th September 2026
+    # -----------------------------------------------------
+
+    for month_name, month_number in ENGLISH_MONTHS.items():
+
+        pattern = (
+            rf"\b(\d{{1,2}})"
+            rf"(?:st|nd|rd|th)?"
+            rf"\s+"
+            rf"{re.escape(month_name)}"
+            rf"\s*,?\s*"
+            rf"(\d{{4}})\b"
+        )
+
+        match = re.search(
+            pattern,
+            text,
+            re.IGNORECASE
+        )
+
+        if match:
+
+            day = int(match.group(1))
+            year = int(match.group(2))
+
+            try:
+
+                return date(
+                    year,
+                    month_number,
+                    day
+                )
+
+            except ValueError:
+
+                return None
+
+
+    # -----------------------------------------------------
+    # ENGLISH
+    #
+    # September 10, 2026
+    # -----------------------------------------------------
+
+    for month_name, month_number in ENGLISH_MONTHS.items():
+
+        pattern = (
+            rf"\b{re.escape(month_name)}"
+            rf"\s+"
+            rf"(\d{{1,2}})"
+            rf"(?:st|nd|rd|th)?"
+            rf"\s*,?\s*"
+            rf"(\d{{4}})\b"
+        )
+
+        match = re.search(
+            pattern,
+            text,
+            re.IGNORECASE
+        )
+
+        if match:
+
+            day = int(match.group(1))
+            year = int(match.group(2))
+
+            try:
+
+                return date(
+                    year,
+                    month_number,
+                    day
+                )
+
+            except ValueError:
+
+                return None
+
+
+    return None
+
+
+# =========================================================
+# RELATIVE DATE DETECTION
+# =========================================================
+
+def extract_relative_date(text, reference_date):
+
+    if not text:
+        return None
+
+    if reference_date is None:
+        return None
+
+    text_lower = text.lower()
+
+
+    # -----------------------------------------------------
+    # TELUGU TODAY
+    # -----------------------------------------------------
+
+    today_words = [
+        "నేడు",
+        "ఈరోజు",
+        "ఈ రోజు",
+        "ఇవాళ",
+    ]
+
+    for word in today_words:
+
+        if word in text:
+
+            return {
+                "date": reference_date,
+                "type": "exact",
+                "description": "ఈరోజు / నేడు"
+            }
+
+
+    # -----------------------------------------------------
+    # TELUGU YESTERDAY
+    # -----------------------------------------------------
+
+    yesterday_words = [
+        "నిన్న",
+        "నిన్నటి రోజు",
+    ]
+
+    for word in yesterday_words:
+
+        if word in text:
+
+            result_date = (
+                reference_date -
+                timedelta(days=1)
+            )
+
+            return {
+                "date": result_date,
+                "type": "exact",
+                "description": "నిన్న"
+            }
+
+
+    # -----------------------------------------------------
+    # ENGLISH TODAY
+    # -----------------------------------------------------
+
+    if re.search(
+        r"\btoday\b",
+        text_lower
+    ):
+
+        return {
+            "date": reference_date,
+            "type": "exact",
+            "description": "today"
+        }
+
+
+    # -----------------------------------------------------
+    # ENGLISH YESTERDAY
+    # -----------------------------------------------------
+
+    if re.search(
+        r"\byesterday\b",
+        text_lower
+    ):
+
+        result_date = (
+            reference_date -
+            timedelta(days=1)
+        )
+
+        return {
+            "date": result_date,
+            "type": "exact",
+            "description": "yesterday"
+        }
+
+
+    # -----------------------------------------------------
+    # LAST WEEK
+    #
+    # DO NOT GUESS ONE PARTICULAR DAY.
+    # Return a range.
+    # -----------------------------------------------------
+
+    last_week_words = [
+        "గత వారం",
+        "గత వారంలో",
+        "last week"
+    ]
+
+    for word in last_week_words:
+
+        if word.lower() in text_lower:
+
+            current_week_start = (
+                reference_date -
+                timedelta(
+                    days=reference_date.weekday()
+                )
+            )
+
+            previous_week_start = (
+                current_week_start -
+                timedelta(days=7)
+            )
+
+            previous_week_end = (
+                current_week_start -
+                timedelta(days=1)
+            )
+
+            return {
+                "date": None,
+                "type": "range",
+                "start": previous_week_start,
+                "end": previous_week_end,
+                "description": word
+            }
+
+
+    return None
+
+
+# =========================================================
+# MAIN INCIDENT DATE EXTRACTION
+# =========================================================
+
+def extract_incident_date(
+    text,
+    reference_date=None
+):
+
     """
-    Try to identify incident/offence date from user-provided text.
+    Returns dictionary:
+
+    {
+        "date": date object,
+        "type": "exact",
+        "source": "..."
+    }
+
+    OR
+
+    {
+        "type": "range",
+        "start": date,
+        "end": date
+    }
+
+    IMPORTANT:
+
+    FIR date / complaint date should NOT automatically
+    become incident date.
     """
 
     if not text:
         return None
 
-    patterns = [
-        r"(?:incident date|date of incident|offence date|date of offence)"
-        r"\s*[:\-]?\s*(\d{1,2}[-/.]\d{1,2}[-/.]\d{4})",
+    text = str(text)
 
-        r"(?:occurrence date|date of occurrence)"
-        r"\s*[:\-]?\s*(\d{1,2}[-/.]\d{1,2}[-/.]\d{4})",
+    lines = text.splitlines()
 
-        r"(?:incident|offence|occurrence)"
-        r".{0,40}?"
-        r"(\d{1,2}[-/.]\d{1,2}[-/.]\d{4})",
+
+    # =====================================================
+    # STEP 1
+    # EXPLICIT INCIDENT/OCCURRENCE/OFFENCE DATE
+    # =====================================================
+
+    explicit_keywords = [
+
+        "incident date",
+        "date of incident",
+
+        "offence date",
+        "date of offence",
+
+        "offense date",
+        "date of offense",
+
+        "occurrence date",
+        "date of occurrence",
+
+        "incident",
+        "occurrence",
+
+        "సంఘటన తేదీ",
+        "సంఘటన జరిగిన తేదీ",
+
+        "నేరం జరిగిన తేదీ",
+        "నేర తేదీ",
+
+        "ఘటన తేదీ",
+        "ఘటన జరిగిన తేదీ",
+
+        "జరిగిన తేదీ",
     ]
 
-    for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
 
-        if match:
-            parsed = parse_date_string(match.group(1))
+    for line in lines:
 
-            if parsed:
-                return parsed
+        lower_line = line.lower()
 
-    # General date search as fallback
-    general_pattern = r"\b(\d{1,2}[-/.]\d{1,2}[-/.]\d{4})\b"
+        found_keyword = False
 
-    matches = re.findall(general_pattern, text)
+        for keyword in explicit_keywords:
 
-    for item in matches:
-        parsed = parse_date_string(item)
+            if keyword.lower() in lower_line:
+
+                found_keyword = True
+                break
+
+
+        if not found_keyword:
+            continue
+
+
+        # -------------------------------------------------
+        # Telugu / English named month
+        # -------------------------------------------------
+
+        parsed = parse_named_month_date(line)
 
         if parsed:
-            return parsed
+
+            return {
+                "date": parsed,
+                "type": "exact",
+                "source": "explicit incident date"
+            }
+
+
+        # -------------------------------------------------
+        # Numeric date
+        # -------------------------------------------------
+
+        numeric_match = re.search(
+            r"\b\d{1,2}[-/.]\d{1,2}[-/.]\d{4}\b",
+            line
+        )
+
+        if numeric_match:
+
+            parsed = parse_date_string(
+                numeric_match.group(0)
+            )
+
+            if parsed:
+
+                return {
+                    "date": parsed,
+                    "type": "exact",
+                    "source": "explicit incident date"
+                }
+
+
+    # =====================================================
+    # STEP 2
+    # DATE RANGE
+    #
+    # 28-05-2017 23:30 to 29-05-2017 06:00
+    # =====================================================
+
+    range_pattern = (
+        r"\b"
+        r"(\d{1,2}[-/.]\d{1,2}[-/.]\d{4})"
+        r"(?:\s+\d{1,2}[:.]\d{2})?"
+        r"\s*"
+        r"(?:to|-|until|వరకు)"
+        r"\s*"
+        r"(\d{1,2}[-/.]\d{1,2}[-/.]\d{4})"
+    )
+
+    range_match = re.search(
+        range_pattern,
+        text,
+        re.IGNORECASE
+    )
+
+    if range_match:
+
+        start_date = parse_date_string(
+            range_match.group(1)
+        )
+
+        end_date = parse_date_string(
+            range_match.group(2)
+        )
+
+        if start_date and end_date:
+
+            return {
+                "date": start_date,
+                "type": "range",
+                "start": start_date,
+                "end": end_date,
+                "source": "incident date range"
+            }
+
+
+    # =====================================================
+    # STEP 3
+    # NAMED MONTH DATE ANYWHERE
+    # =====================================================
+
+    parsed = parse_named_month_date(text)
+
+    if parsed:
+
+        return {
+            "date": parsed,
+            "type": "exact",
+            "source": "named month date"
+        }
+
+
+    # =====================================================
+    # STEP 4
+    # INCIDENT-RELATED LINE + NUMERIC DATE
+    # =====================================================
+
+    incident_words = [
+
+        "incident",
+        "offence",
+        "offense",
+        "occurrence",
+        "crime",
+
+        "సంఘటన",
+        "ఘటన",
+        "నేరం",
+        "జరిగిన",
+    ]
+
+
+    for line in lines:
+
+        lower_line = line.lower()
+
+        if any(
+            word.lower() in lower_line
+            for word in incident_words
+        ):
+
+            numeric_match = re.search(
+                r"\b\d{1,2}[-/.]\d{1,2}[-/.]\d{4}\b",
+                line
+            )
+
+            if numeric_match:
+
+                parsed = parse_date_string(
+                    numeric_match.group(0)
+                )
+
+                if parsed:
+
+                    return {
+                        "date": parsed,
+                        "type": "exact",
+                        "source": "incident-related line"
+                    }
+
+
+    # =====================================================
+    # STEP 5
+    # RELATIVE DATE
+    # =====================================================
+
+    relative_result = extract_relative_date(
+        text,
+        reference_date
+    )
+
+    if relative_result:
+
+        return relative_result
+
+
+    # =====================================================
+    # STEP 6
+    # NO DATE FOUND
+    # =====================================================
 
     return None
 
@@ -163,98 +773,192 @@ def extract_incident_date(text):
 # LAW SELECTION
 # =========================================================
 
-def select_law(incident_date, old_case_pending=False):
-    """
-    Decide which criminal-law framework should primarily be used.
+def select_law(
+    incident_info,
+    old_case_pending=False
+):
 
-    IMPORTANT:
-    - Before 01-07-2024 -> old law framework
-    - On/after 01-07-2024 -> new law framework
-    - Old proceedings pending at commencement may continue under old law
-      because of repeal-and-savings provisions.
-    """
+    if incident_info is None:
 
-    if incident_date is None:
         return {
             "status": "UNKNOWN",
             "framework": "DATE_REQUIRED",
             "reason": (
-                "Incident/offence date could not be identified. "
-                "Do not guess BNS/IPC. Ask for the date of occurrence."
+                "Incident/offence date could not be identified."
             )
         }
+
+
+    # -----------------------------------------------------
+    # Relative range
+    # -----------------------------------------------------
+
+    if incident_info.get("type") == "range":
+
+        start_date = incident_info["start"]
+        end_date = incident_info["end"]
+
+        if end_date < NEW_LAW_DATE:
+
+            return {
+                "status": "OLD_RANGE",
+                "framework": (
+                    "IPC / CrPC / "
+                    "INDIAN EVIDENCE ACT"
+                ),
+                "reason": (
+                    "The stated incident period is before "
+                    "01-07-2024."
+                )
+            }
+
+        elif start_date >= NEW_LAW_DATE:
+
+            return {
+                "status": "NEW_RANGE",
+                "framework": "BNS / BNSS / BSA",
+                "reason": (
+                    "The stated incident period is on/after "
+                    "01-07-2024."
+                )
+            }
+
+        else:
+
+            return {
+                "status": "CROSS_TRANSITION",
+                "framework": "DATE_REVIEW_REQUIRED",
+                "reason": (
+                    "The incident period crosses "
+                    "01-07-2024. Exact dates and legal "
+                    "transition provisions must be reviewed."
+                )
+            }
+
+
+    # -----------------------------------------------------
+    # Exact date
+    # -----------------------------------------------------
+
+    incident_date = incident_info["date"]
+
+
+    # -----------------------------------------------------
+    # Old pending proceeding
+    # -----------------------------------------------------
 
     if old_case_pending:
+
         return {
             "status": "OLD_PENDING",
-            "framework": "IPC / CrPC / INDIAN EVIDENCE ACT",
+            "framework": (
+                "IPC / CrPC / "
+                "INDIAN EVIDENCE ACT"
+            ),
             "reason": (
-                "The case/proceeding was already pending before "
-                "01-07-2024. Repeal-and-savings provisions may preserve "
-                "the old-law framework for the pending proceeding."
+                "The proceeding is stated to have been "
+                "pending before 01-07-2024. Repeal-and-"
+                "savings / transitional provisions must "
+                "also be considered."
             )
         }
 
+
+    # -----------------------------------------------------
+    # Before 01-07-2024
+    # -----------------------------------------------------
+
     if incident_date < NEW_LAW_DATE:
+
         return {
             "status": "OLD",
-            "framework": "IPC / CrPC / INDIAN EVIDENCE ACT",
+            "framework": (
+                "IPC / CrPC / "
+                "INDIAN EVIDENCE ACT"
+            ),
             "reason": (
-                f"Incident date {incident_date.strftime('%d-%m-%Y')} "
-                "is before 01-07-2024."
+                f"Incident date "
+                f"{incident_date.strftime('%d-%m-%Y')} "
+                f"is before 01-07-2024."
             )
         }
+
+
+    # -----------------------------------------------------
+    # On / after 01-07-2024
+    # -----------------------------------------------------
 
     return {
         "status": "NEW",
         "framework": "BNS / BNSS / BSA",
         "reason": (
-            f"Incident date {incident_date.strftime('%d-%m-%Y')} "
-            "is on/after 01-07-2024."
+            f"Incident date "
+            f"{incident_date.strftime('%d-%m-%Y')} "
+            f"is on/after 01-07-2024."
         )
     }
 
 
 # =========================================================
-# TEXT EXTRACTION FROM PDF
+# PDF TEXT EXTRACTION
 # =========================================================
 
 def extract_pdf_text(uploaded_file):
 
     if not PDF_AVAILABLE:
+
         return (
-            "PDF reader library (pypdf) is not installed. "
-            "Please add pypdf to requirements.txt."
+            "PDF reader library (pypdf) installed లేదు. "
+            "requirements.txtలో pypdf పెట్టండి."
         )
 
+
     try:
+
         uploaded_file.seek(0)
 
-        reader = PdfReader(uploaded_file)
+        reader = PdfReader(
+            uploaded_file
+        )
 
         pages = []
 
+
         for page in reader.pages:
+
             try:
+
                 page_text = page.extract_text()
 
                 if page_text:
-                    pages.append(page_text)
+
+                    pages.append(
+                        page_text
+                    )
 
             except Exception:
+
                 continue
 
-        text = "\n".join(pages).strip()
+
+        text = "\n".join(
+            pages
+        ).strip()
+
 
         if text:
+
             return text
+
 
         return (
             "PDFలో selectable text కనిపించలేదు. "
-            "ఇది scanned PDF కావచ్చు. PDF pagesను imagesగా OCR చేయాల్సి ఉంటుంది."
+            "ఇది scanned PDF కావచ్చు."
         )
 
+
     except Exception as e:
+
         return f"PDF చదవడంలో సమస్య: {e}"
 
 
@@ -265,28 +969,39 @@ def extract_pdf_text(uploaded_file):
 def extract_image_text(uploaded_file):
 
     if not OCR_AVAILABLE:
+
         return (
-            "OCR library (pytesseract) అందుబాటులో లేదు. "
-            "requirements.txtలో pytesseract పెట్టండి."
+            "OCR library (pytesseract) అందుబాటులో లేదు."
         )
 
+
     try:
-        image = Image.open(uploaded_file)
+
+        image = Image.open(
+            uploaded_file
+        )
+
 
         text = pytesseract.image_to_string(
             image,
             lang="eng"
         )
 
+
         if text.strip():
+
             return text.strip()
+
 
         return (
             "Image నుంచి text గుర్తించలేకపోయింది. "
-            "Handwriting లేదా Telugu text అయితే OCR accuracy తక్కువగా ఉండవచ్చు."
+            "Telugu handwriting అయితే OCR accuracy "
+            "తక్కువగా ఉండవచ్చు."
         )
 
+
     except Exception as e:
+
         return f"Image OCRలో సమస్య: {e}"
 
 
@@ -294,32 +1009,73 @@ def extract_image_text(uploaded_file):
 # FILE EXTRACTION
 # =========================================================
 
-def extract_uploaded_file(uploaded_file):
+def extract_uploaded_file(
+    uploaded_file
+):
 
     if uploaded_file is None:
+
         return ""
 
-    filename = uploaded_file.name.lower()
+
+    filename = (
+        uploaded_file.name.lower()
+    )
+
+
+    # -----------------------------------------------------
+    # TXT
+    # -----------------------------------------------------
 
     if filename.endswith(".txt"):
+
         try:
+
             uploaded_file.seek(0)
+
             return uploaded_file.read().decode(
                 "utf-8",
                 errors="ignore"
             )
+
         except Exception as e:
+
             return f"TXT చదవడంలో సమస్య: {e}"
 
+
+    # -----------------------------------------------------
+    # PDF
+    # -----------------------------------------------------
+
     if filename.endswith(".pdf"):
-        return extract_pdf_text(uploaded_file)
+
+        return extract_pdf_text(
+            uploaded_file
+        )
+
+
+    # -----------------------------------------------------
+    # IMAGE
+    # -----------------------------------------------------
 
     if filename.endswith(
-        (".jpg", ".jpeg", ".png", ".webp", ".bmp")
+        (
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp",
+            ".bmp"
+        )
     ):
-        return extract_image_text(uploaded_file)
 
-    return "ఈ file format ప్రస్తుతం support చేయబడలేదు."
+        return extract_image_text(
+            uploaded_file
+        )
+
+
+    return (
+        "ఈ file format ప్రస్తుతం support చేయబడలేదు."
+    )
 
 
 # =========================================================
@@ -327,13 +1083,13 @@ def extract_uploaded_file(uploaded_file):
 # =========================================================
 
 SYSTEM_PROMPT = r"""
-You are a careful Indian criminal-law research and investigation assistant
-for police investigation work.
+You are a careful Indian criminal-law research and investigation
+assistant for police investigation support.
 
 Your job is NOT to blindly assign BNS/BNSS/BSA sections.
 
 =========================================================
-1. MOST IMPORTANT RULE — DATE OF OFFENCE
+1. DATE OF OFFENCE IS THE FIRST STEP
 =========================================================
 
 First identify the INCIDENT / OFFENCE / OCCURRENCE DATE.
@@ -347,95 +1103,121 @@ The new criminal-law framework came into force from 01-07-2024:
 For an offence occurring BEFORE 01-07-2024:
 
 Do NOT automatically apply:
+
 - BNS
 - BNSS
 - BSA
 
 The substantive offence should ordinarily be analysed under the law
-applicable when the offence was committed, subject to repeal/savings
-and any other applicable transitional law.
+applicable when the offence was committed, subject to repeal,
+savings and transitional provisions.
 
-For old cases/proceedings that were already pending when the new laws
-came into force, carefully consider the relevant repeal-and-savings
-provisions before suggesting procedural/evidentiary provisions.
+For an old proceeding already pending when the new laws came into
+force, separately consider the applicable repeal-and-savings
+provisions.
 
 For an offence occurring ON or AFTER 01-07-2024:
 
 Use:
-- BNS for offences/punishments
+
+- BNS for offences and punishments
 - BNSS for criminal procedure
 - BSA for evidence
 
+
 =========================================================
-2. NEVER GUESS THE DATE
+2. DATE TYPES MUST BE DISTINGUISHED
 =========================================================
 
-If the incident/offence date is not available:
+Always distinguish:
 
-Say clearly:
-
-"Incident/offence date is required to select the applicable criminal-law
-framework."
-
-Do NOT guess BNS or IPC.
-
-Distinguish between:
-
-- date of occurrence
-- date of complaint
+- Incident / occurrence date
+- Offence date
+- Complaint date
 - FIR date
-- investigation date
-- arrest date
-- charge-sheet date
-- trial date
-- date on which proceeding became pending
+- Investigation date
+- Arrest date
+- Charge-sheet date
+- Trial date
+- Date on which proceeding became pending
 
-Do not confuse FIR date with offence date.
+Never assume FIR date = incident date.
 
-=========================================================
-3. OLD-LAW CASES
-=========================================================
+Never assume report-generation date = incident date.
 
-For incidents before 01-07-2024, use the historical framework where
-appropriate:
-
-SUBSTANTIVE LAW:
-Indian Penal Code, 1860 (IPC)
-
-PROCEDURE:
-Code of Criminal Procedure, 1973 (CrPC)
-
-EVIDENCE:
-Indian Evidence Act, 1872 (IEA)
-
-Do not convert an old FIR's historical IPC/CrPC/IEA provisions into
-BNS/BNSS/BSA merely because the report is being generated today.
-
-If discussing a historical 2017 theft case, for example, do not say:
-
-"BNS 305 is the offence."
-
-Instead identify the applicable IPC provision and explain that
-the incident predates 01-07-2024.
 
 =========================================================
-4. NEW-LAW CASES
+3. TELUGU DATES
 =========================================================
 
-For incidents on/after 01-07-2024:
+Understand Telugu date expressions such as:
+
+- 10 సెప్టెంబర్ 2026
+- 10 సెప్టెంబరు 2026
+- 10 అక్టోబర్ 2026
+- 10-09-2026
+- 10/09/2026
+- 10.09.2026
+- నిన్న
+- నేడు
+- ఈరోజు
+- ఇవాళ
+- గత వారం
+
+For relative dates, use the stated complaint/report reference date
+when available.
+
+Do NOT invent an exact day from "గత వారం".
+
+If only "గత వారం" is stated, treat it as a date range and explain
+that the exact occurrence date should be verified.
+
+
+=========================================================
+4. OLD CASES
+=========================================================
+
+For incidents before 01-07-2024:
+
+Primary historical framework:
+
+- Indian Penal Code, 1860 (IPC)
+- Code of Criminal Procedure, 1973 (CrPC)
+- Indian Evidence Act, 1872 (IEA)
+
+Do NOT rewrite an old FIR into BNS/BNSS/BSA merely because the report
+is being prepared today.
+
+Example:
+
+Incident Date: 28-05-2017
+
+Do NOT say:
+
+"BNS 305 applies."
+
+Instead identify the applicable historical IPC provision and explain
+the transition/repeal-and-savings issue where relevant.
+
+
+=========================================================
+5. NEW CASES
+=========================================================
+
+For incidents on or after 01-07-2024:
 
 Use:
 
-BNS = substantive offences and punishments
+BNS = substantive offence and punishment
 
-BNSS = FIR, investigation, arrest, search, seizure, remand,
-       witness procedure, case diary, final report, etc.
+BNSS = FIR, investigation, arrest, search, seizure, witnesses,
+       remand, case diary and final report
 
-BSA = relevancy/admissibility/proof of evidence, including electronic
-      records where applicable.
+BSA = evidence and electronic/digital evidence
+
 
 =========================================================
-5. SECTION ACCURACY
+6. SECTION ACCURACY
 =========================================================
 
 NEVER invent section numbers.
@@ -444,20 +1226,20 @@ Before mentioning a section:
 
 1. Identify the Act.
 2. Identify the exact section.
-3. State what that section actually covers.
-4. Do not assign a section merely because it sounds related.
+3. Explain what the section actually covers.
+4. Do not use a section simply because it sounds relevant.
 
-If uncertain, say:
+If uncertain:
 
-"Section should be verified from the official text before use."
+"VERIFY FROM OFFICIAL TEXT."
+
 
 =========================================================
-6. IMPORTANT PROCEDURAL DISTINCTIONS
+7. SEARCH / SEIZURE
 =========================================================
 
-Do NOT confuse:
+Do not confuse:
 
-- FIR registration
 - investigation
 - search
 - search warrant
@@ -466,26 +1248,12 @@ Do NOT confuse:
 - notice to appear
 - production before Magistrate
 - remand
-- case diary
-- final police report
 
-For example, do not automatically describe the general investigation
-section as the search section.
+Do not automatically state that every police search requires a
+Magistrate search warrant.
 
-=========================================================
-7. SEARCH
-=========================================================
+Identify the actual statutory basis.
 
-Distinguish:
-
-A. Search by police officer under statutory police powers.
-
-B. Search pursuant to a warrant / judicial process.
-
-Do not automatically say that every police search requires a Magistrate's
-search warrant.
-
-State the factual and legal basis for the particular search.
 
 =========================================================
 8. WITNESSES
@@ -493,119 +1261,92 @@ State the factual and legal basis for the particular search.
 
 Do not invent a mandatory number of panch witnesses.
 
-Do not state "exactly 2 witnesses" or "exactly 3 witnesses" unless the
-specific legal provision actually requires that number.
+Do not say "exactly 2" or "exactly 3" unless the actual law requires
+that number.
 
 Distinguish:
 
 - complainant
 - eyewitness
 - circumstantial witness
-- seizure/panch witness
+- seizure witness
 - independent witness
 - police witness
-- expert/forensic witness
+- expert witness
+
 
 =========================================================
-9. DIGITAL / ELECTRONIC EVIDENCE
+9. DIGITAL EVIDENCE
 =========================================================
 
-Do not automatically apply every electronic-evidence section to every
-mobile phone, SIM, CCTV, screenshot, WhatsApp message, call detail
-record, or photograph.
+Do not automatically apply every BSA provision to every:
+
+- mobile phone
+- SIM
+- CCTV
+- screenshot
+- WhatsApp message
+- CDR
+- photograph
 
 First identify:
 
-- What is the actual evidence?
-- Is it a physical object?
-- Is it an electronic/digital record?
+- What is the evidence?
+- Physical or electronic?
 - Who produced it?
 - How was it obtained?
 - Is authenticity disputed?
-- What statutory proof/admissibility requirement applies?
+- What proof/admissibility requirement applies?
 
-Distinguish:
+A mobile phone may be physical evidence.
 
-- mobile phone as physical property/evidence
-- SIM card as physical item
-- CDR as electronic record/data
-- CCTV footage as electronic/digital record
-- WhatsApp/chat export as electronic record
-- screenshot as a copy/representation of digital information
-- original device/data source
-- forensic extraction/report
+CDR/CCTV/chat data may constitute electronic/digital records.
 
-Do NOT automatically say:
+Do not automatically state that every screenshot requires the same
+certificate.
 
-"BSA Section 63 certificate is required for every mobile phone."
+Do not automatically state that only a forensic expert can issue an
+electronic-record certificate.
 
-Analyse the actual evidence and applicable statutory requirements.
+Analyse the actual record and mode of production.
 
-Similarly, do not automatically describe BSA Section 64 as a
-"CDR notice section". Explain the actual provision and the actual
-procedure applicable to obtaining the record.
 
 =========================================================
-10. BSA CERTIFICATE
-=========================================================
-
-If an electronic-record certificate is relevant, explain:
-
-- what electronic record is being relied upon
-- what statutory provision applies
-- who is in a position to provide the required certificate/details
-- what device/source information is relevant
-- whether the evidence is primary/original or a reproduced/derived record
-
-Do not automatically say:
-
-"Only a forensic expert can issue the certificate."
-
-Do not automatically say:
-
-"Every screenshot requires a certificate."
-
-The conclusion must depend on the nature and mode of production of
-the electronic record.
-
-=========================================================
-11. ARREST
+10. ARREST
 =========================================================
 
 Do not recommend arrest merely because an offence is cognizable.
 
-Analyse:
+Consider:
 
 - cognizable/non-cognizable
 - bailable/non-bailable
 - necessity of arrest
 - statutory conditions
-- identification of accused
-- evidence available
-- risk of absconding
-- cooperation with investigation
-- applicable safeguards
+- identification
+- evidence
+- absconding risk
+- cooperation
+- safeguards
 
-If the accused is unknown, do not write as if the accused has already
-been identified.
 
 =========================================================
-12. BAIL
+11. BAIL
 =========================================================
 
 Clearly distinguish:
 
 - bailable
 - non-bailable
-- anticipatory bail
 - regular bail
-- statutory/default bail where relevant
+- anticipatory bail
+- default/statutory bail where applicable
 
-Do not write "generally bailable" or "generally non-bailable" when the
-official classification can be identified.
+Do not guess.
+
 
 =========================================================
-13. PUNISHMENT
+12. PUNISHMENT
 =========================================================
 
 State punishment accurately.
@@ -618,42 +1359,43 @@ Do not invent:
 - classification
 - trial court
 
-If classification is uncertain, say so and recommend verification.
 
 =========================================================
-14. TRIAL COURT
+13. TRIAL COURT
 =========================================================
 
-Do not automatically say "Sessions Court" merely because punishment is
-high.
+Do not automatically say Sessions Court.
 
-Check the applicable schedule/classification and state the appropriate
-court.
+Check the applicable classification and state the appropriate court.
 
-=========================================================
-15. OLD CASE EXAMPLE
-=========================================================
-
-If the user provides:
-
-Incident date: 28-05-2017
-
-Then the report must NOT say:
-
-"BNS 305 applies because theft in dwelling house."
-
-Instead it must recognize that the occurrence predates 01-07-2024 and
-analyse the offence under the law applicable at that time, subject to
-the applicable savings/transitional provisions.
-
-For a 2017 house-theft case, the model should consider the relevant
-IPC provision rather than automatically substituting BNS 305.
 
 =========================================================
-16. REPORT FORMAT
+14. NO FABRICATION
 =========================================================
 
-Always generate the report in this order:
+Never invent:
+
+- FIR number
+- police station
+- officer name
+- accused identity
+- dates
+- witnesses
+- section numbers
+- court orders
+- forensic results
+- recoveries
+
+If missing:
+
+"Not provided."
+
+
+=========================================================
+15. REPORT FORMAT
+=========================================================
+
+Generate:
 
 1. CASE DATE & APPLICABLE LAW
 2. CASE SUMMARY
@@ -671,67 +1413,47 @@ Always generate the report in this order:
 14. DIGITAL / ELECTRONIC EVIDENCE
 15. FORENSIC REQUIREMENTS
 16. RECOVERY OF PROPERTY
-17. IDENTIFICATION / TEST IDENTIFICATION IF RELEVANT
+17. IDENTIFICATION / TEST IDENTIFICATION
 18. CASE DIARY / INVESTIGATION RECORD
 19. FINAL REPORT / CHARGE SHEET
 20. INVESTIGATION OFFICER CHECKLIST
 21. LEGAL CAUTIONS / ITEMS TO VERIFY
 
+
 =========================================================
-17. DATE WARNING
+16. DATE WARNING
 =========================================================
 
-At the top of every report include:
+If pre-01-07-2024:
 
-"Applicable-law determination is based primarily on the stated
-occurrence/offence date and must be checked against the relevant
-repeal-and-savings/transitional provisions and the actual procedural
-history of the case."
-
-If the case is pre-01-07-2024, visibly display:
-
-"⚠️ OLD-LAW CASE:
+"OLD-LAW CASE:
 IPC / CrPC / Indian Evidence Act framework applies subject to
 repeal-and-savings/transitional provisions."
 
-If the case is on/after 01-07-2024, display:
+If on/after 01-07-2024:
 
-"✅ NEW-LAW CASE:
+"NEW-LAW CASE:
 BNS / BNSS / BSA framework applies."
 
+If date is unclear:
+
+"Incident/offence date must be verified before selecting the legal
+framework."
+
+
 =========================================================
-18. NO FABRICATION
+17. FINAL LEGAL CAUTION
 =========================================================
 
-Never invent:
+This is an investigation-support and legal research tool.
 
-- FIR number
-- police station
-- officer name
-- accused identity
-- dates
-- witness names
-- section numbers
+Final legal action must be verified against:
+
+- official statute
+- applicable notifications
 - court orders
-- forensic results
-- recoveries
-- case-diary entries
-
-If information is missing, say:
-
-"Not provided."
-
-=========================================================
-19. LEGAL DISCLAIMER
-=========================================================
-
-This is an investigation-support tool and not a substitute for the
-official statute, notification, court order, prosecutor's opinion,
-or legal advice.
-
-For operational use, verify the final section numbers and procedure
-against the official current statute and applicable case-specific
-orders/notifications.
+- prosecution/legal opinion
+- actual case facts
 """
 
 
@@ -739,99 +1461,195 @@ orders/notifications.
 # BUILD USER PROMPT
 # =========================================================
 
-def build_user_prompt(case_text, law_info, old_pending):
+def build_user_prompt(
+    case_text,
+    law_info,
+    incident_info,
+    reference_date,
+    old_pending
+):
 
-    incident_date_text = "Not identified"
+    # -----------------------------------------------------
+    # Incident date text
+    # -----------------------------------------------------
 
-    incident_date = extract_incident_date(case_text)
+    if incident_info is None:
 
-    if incident_date:
-        incident_date_text = incident_date.strftime("%d-%m-%Y")
+        incident_date_text = "NOT IDENTIFIED"
 
-    pending_text = "Yes" if old_pending else "No / not stated"
+    elif incident_info.get("type") == "range":
+
+        incident_date_text = (
+            f"{incident_info['start'].strftime('%d-%m-%Y')}"
+            f" to "
+            f"{incident_info['end'].strftime('%d-%m-%Y')}"
+        )
+
+    else:
+
+        incident_date_text = (
+            incident_info["date"].strftime(
+                "%d-%m-%Y"
+            )
+        )
+
+
+    # -----------------------------------------------------
+    # Reference date
+    # -----------------------------------------------------
+
+    if reference_date:
+
+        reference_text = (
+            reference_date.strftime(
+                "%d-%m-%Y"
+            )
+        )
+
+    else:
+
+        reference_text = "Not provided"
+
+
+    # -----------------------------------------------------
+    # Pending status
+    # -----------------------------------------------------
+
+    pending_text = (
+        "Yes"
+        if old_pending
+        else
+        "No / not stated"
+    )
+
 
     return f"""
-Analyse the following police case carefully.
+Analyse the following police complaint/case.
 
-IMPORTANT DATE INFORMATION
---------------------------
-Incident / offence date detected:
+=========================================================
+DATE INFORMATION
+=========================================================
+
+Detected Incident / Offence Date:
 {incident_date_text}
 
-01-07-2024 transition date:
+Reference / Complaint Date:
+{reference_text}
+
+01-07-2024 Transition Date:
 01-07-2024
 
 Old proceeding pending before 01-07-2024:
 {pending_text}
 
-Selected primary framework:
+Selected Primary Legal Framework:
 {law_info["framework"]}
 
 Reason:
 {law_info["reason"]}
 
+
+=========================================================
 CASE MATERIAL
--------------
+=========================================================
+
 {case_text}
 
+
+=========================================================
 MANDATORY INSTRUCTIONS
-----------------------
+=========================================================
 
 1. First state the incident/offence date.
-2. State which legal framework applies.
+
+2. State the applicable legal framework.
+
 3. Explain why that framework applies.
+
 4. Do not substitute BNS/BNSS/BSA for a pre-01-07-2024 occurrence.
-5. If this is an old pending proceeding, separately explain the
-   repeal-and-savings issue.
-6. Do not guess sections.
+
+5. If this is an old pending proceeding, separately discuss
+   repeal-and-savings/transitional provisions.
+
+6. Do not guess section numbers.
+
 7. Do not fabricate facts.
-8. If an exact section needs verification, clearly mark it as
-   "VERIFY".
+
+8. Distinguish incident date from FIR/complaint date.
+
 9. Distinguish physical evidence from electronic evidence.
-10. Do not automatically require a BSA electronic-record certificate
+
+10. Do not automatically require an electronic-record certificate
     for every digital item.
+
 11. Give practical investigation steps.
-12. Give a final IO checklist.
-13. Mention all assumptions separately.
+
+12. Give an IO checklist.
+
+13. Clearly identify assumptions.
+
+14. If exact legal provision requires verification, mark it:
+    "VERIFY FROM OFFICIAL TEXT."
+
+15. For relative dates such as "గత వారం", do not invent an exact
+    occurrence date. State the date range and request verification
+    of the exact date.
 """
 
 
 # =========================================================
-# CALL GROQ
+# GROQ ANALYSIS
 # =========================================================
 
-def investigate_case(case_text, law_info, old_pending):
+def investigate_case(
+    case_text,
+    law_info,
+    incident_info,
+    reference_date,
+    old_pending
+):
 
     user_prompt = build_user_prompt(
         case_text,
         law_info,
+        incident_info,
+        reference_date,
         old_pending
     )
+
 
     try:
 
         response = client.chat.completions.create(
+
             model=MODEL_NAME,
+
             messages=[
+
                 {
                     "role": "system",
                     "content": SYSTEM_PROMPT
                 },
+
                 {
                     "role": "user",
                     "content": user_prompt
                 }
             ],
+
             temperature=0.1,
+
             max_tokens=12000
         )
 
+
         return response.choices[0].message.content
+
 
     except Exception as e:
 
         return (
-            "AI legal analysisలో error వచ్చింది.\n\n"
+            "❌ AI legal analysisలో error వచ్చింది.\n\n"
             f"Error: {e}"
         )
 
@@ -840,32 +1658,55 @@ def investigate_case(case_text, law_info, old_pending):
 # CASE DETAILS
 # =========================================================
 
-st.subheader("📝 కేసు వివరాలు")
+st.subheader("📝 కేసు / ఫిర్యాదు వివరాలు")
+
 
 case_text = st.text_area(
-    "కేసు వివరాలు / FIR / Complaint వివరాలు ఇక్కడ paste చేయండి",
-    height=300,
+
+    "కేసు వివరాలు / FIR / Complaint ఇక్కడ paste చేయండి",
+
+    height=350,
+
     placeholder=(
-        "ఉదాహరణ:\n"
-        "Incident Date: 28-05-2017\n"
-        "FIR Date: 29-05-2017\n"
-        "Unknown persons entered the house..."
+        "ఉదాహరణ:\n\n"
+        "నేను పైన పేర్కొన్న చిరునామాలో నివసిస్తున్నాను.\n"
+        "10 సెప్టెంబర్ 2026న జరిగిన ఒక మోసం సంఘటనపై...\n"
+        "మధ్యాహ్నం సుమారు 2:30 గంటలకు..."
     )
 )
 
 
 # =========================================================
-# OLD PENDING CASE OPTION
+# REFERENCE DATE
 # =========================================================
 
-st.subheader("⚖️ Applicable Law Selection")
+st.subheader("📅 Complaint / Reference Date")
 
-st.info(
-    "Incident date 01-07-2024 కంటే ముందు ఉంటే old-law framework "
-    "(IPC / CrPC / IEA)ను ప్రధానంగా ఉపయోగిస్తుంది."
+st.caption(
+    "‘నిన్న’, ‘ఈరోజు’, ‘గత వారం’ వంటి relative dates ఉంటే "
+    "ఈ తేదీని referenceగా ఉపయోగిస్తుంది."
 )
 
+
+reference_date = st.date_input(
+
+    "ఫిర్యాదు / నివేదిక ఇచ్చిన తేదీ",
+
+    value=date.today(),
+
+    format="DD-MM-YYYY"
+)
+
+
+# =========================================================
+# OLD PENDING OPTION
+# =========================================================
+
+st.subheader("⚖️ Old Pending Case Check")
+
+
 old_pending = st.checkbox(
+
     "01-07-2024కి ముందు ఈ కేసు / proceeding ఇప్పటికే pendingలో ఉందా?"
 )
 
@@ -876,8 +1717,11 @@ old_pending = st.checkbox(
 
 st.subheader("📎 FIR / Complaint / Document Upload")
 
+
 uploaded_file = st.file_uploader(
+
     "PDF / TXT / Image upload చేయండి",
+
     type=[
         "pdf",
         "txt",
@@ -896,162 +1740,310 @@ uploaded_file = st.file_uploader(
 
 uploaded_text = ""
 
+
 if uploaded_file is not None:
 
-    with st.spinner("Document చదువుతోంది..."):
-        uploaded_text = extract_uploaded_file(uploaded_file)
+    with st.spinner(
+        "Document చదువుతోంది..."
+    ):
+
+        uploaded_text = extract_uploaded_file(
+            uploaded_file
+        )
+
 
     if uploaded_text:
 
-        st.success("Document text తీసుకుంది.")
+        st.success(
+            "✅ Document text తీసుకుంది."
+        )
 
-        with st.expander("📄 Extracted Text చూడండి"):
+
+        with st.expander(
+            "📄 Extracted Text చూడండి"
+        ):
+
             st.text_area(
                 "Extracted Text",
                 uploaded_text,
-                height=250
+                height=300
             )
 
 
 # =========================================================
-# COMBINE INPUT
+# COMBINE TEXT
 # =========================================================
 
-combined_text = case_text.strip()
+combined_text = (
+    case_text.strip()
+)
+
 
 if uploaded_text.strip():
 
     if combined_text:
-        combined_text += "\n\n"
-        combined_text += "----- UPLOADED DOCUMENT -----\n\n"
 
-    combined_text += uploaded_text.strip()
-
-
-# =========================================================
-# DETECT DATE
-# =========================================================
-
-incident_date = extract_incident_date(combined_text)
+        combined_text += (
+            "\n\n"
+            "----- UPLOADED DOCUMENT -----"
+            "\n\n"
+        )
 
 
-if incident_date:
-
-    law_info = select_law(
-        incident_date,
-        old_pending
+    combined_text += (
+        uploaded_text.strip()
     )
 
-    if law_info["status"] == "OLD_PENDING":
 
-        st.warning(
-            "⚠️ OLD PENDING CASE\n\n"
-            "Primary framework: IPC / CrPC / Indian Evidence Act\n\n"
-            "01-07-2024కి ముందు pending proceeding కావడంతో "
-            "repeal-and-savings provisions కూడా పరిగణించాలి."
+# =========================================================
+# DETECT INCIDENT DATE
+# =========================================================
+
+incident_info = extract_incident_date(
+
+    combined_text,
+
+    reference_date
+)
+
+
+# =========================================================
+# LAW SELECTION
+# =========================================================
+
+law_info = select_law(
+
+    incident_info,
+
+    old_pending
+)
+
+
+# =========================================================
+# SHOW DETECTED DATE
+# =========================================================
+
+if incident_info is None:
+
+    st.warning(
+        "⚠️ Incident / offence date గుర్తించబడలేదు."
+    )
+
+    st.info(
+        "ఉదాహరణలు:\n"
+        "• 10 సెప్టెంబర్ 2026న\n"
+        "• 10 September 2026\n"
+        "• 10-09-2026\n"
+        "• 10/09/2026\n"
+        "• నిన్న\n"
+        "• ఈరోజు\n"
+        "• గత వారం"
+    )
+
+
+elif incident_info.get("type") == "range":
+
+    st.warning(
+        "📅 Incident Date Range గుర్తించబడింది"
+    )
+
+    st.write(
+        "**From:** "
+        + incident_info["start"].strftime(
+            "%d-%m-%Y"
         )
+    )
 
-    elif law_info["status"] == "OLD":
-
-        st.warning(
-            f"⚠️ OLD-LAW CASE\n\n"
-            f"Incident Date: {incident_date.strftime('%d-%m-%Y')}\n\n"
-            "Applicable primary framework:\n"
-            "IPC / CrPC / Indian Evidence Act"
+    st.write(
+        "**To:** "
+        + incident_info["end"].strftime(
+            "%d-%m-%Y"
         )
+    )
 
-    elif law_info["status"] == "NEW":
-
-        st.success(
-            f"✅ NEW-LAW CASE\n\n"
-            f"Incident Date: {incident_date.strftime('%d-%m-%Y')}\n\n"
-            "Applicable primary framework:\n"
-            "BNS / BNSS / BSA"
+    st.write(
+        "**Source:** "
+        + incident_info.get(
+            "source",
+            "date range"
         )
+    )
+
 
 else:
 
-    law_info = {
-        "status": "UNKNOWN",
-        "framework": "DATE_REQUIRED",
-        "reason": "Incident/offence date not detected."
-    }
+    detected_date = incident_info["date"]
 
-    st.warning(
-        "⚠️ Incident / offence date గుర్తించబడలేదు. "
-        "Analysis చేయడానికి ముందు date verify చేయండి."
+
+    st.write(
+        "**Detected Incident / Offence Date:** "
+        + detected_date.strftime(
+            "%d-%m-%Y"
+        )
+    )
+
+    st.write(
+        "**Date Source:** "
+        + incident_info.get(
+            "source",
+            "detected date"
+        )
     )
 
 
 # =========================================================
-# ANALYZE BUTTON
+# SHOW LAW
+# =========================================================
+
+if law_info["status"] in [
+    "OLD",
+    "OLD_RANGE",
+    "OLD_PENDING"
+]:
+
+    st.warning(
+        "⚠️ OLD-LAW CASE\n\n"
+        "Applicable primary framework:\n"
+        "IPC / CrPC / Indian Evidence Act"
+    )
+
+
+elif law_info["status"] in [
+    "NEW",
+    "NEW_RANGE"
+]:
+
+    st.success(
+        "✅ NEW-LAW CASE\n\n"
+        "Applicable primary framework:\n"
+        "BNS / BNSS / BSA"
+    )
+
+
+elif law_info["status"] == "CROSS_TRANSITION":
+
+    st.error(
+        "⚠️ DATE TRANSITION CASE\n\n"
+        "Incident period 01-07-2024ను cross చేస్తోంది. "
+        "Exact occurrence date మరియు transitional provisions "
+        "verify చేయాలి."
+    )
+
+
+# =========================================================
+# ANALYSIS BUTTON
 # =========================================================
 
 if st.button(
+
     "⚖️ Legal Analysis ప్రారంభించండి",
+
     type="primary",
+
     use_container_width=True
 ):
+
+
+    # -----------------------------------------------------
+    # No input
+    # -----------------------------------------------------
 
     if not combined_text.strip():
 
         st.error(
-            "ముందుగా case details లేదా document upload చేయండి."
+            "❌ ముందుగా case details లేదా document upload చేయండి."
         )
 
-    elif incident_date is None:
+
+    # -----------------------------------------------------
+    # No date
+    # -----------------------------------------------------
+
+    elif incident_info is None:
 
         st.error(
-            "❌ Incident / offence date కనిపించలేదు.\n\n"
-            "ఉదాహరణగా ఇలా ఇవ్వండి:\n"
-            "Incident Date: 28-05-2017"
+            "❌ Incident / offence date గుర్తించబడలేదు.\n\n"
+            "దయచేసి complaintలో occurrence date స్పష్టంగా verify చేయండి."
         )
+
+
+    # -----------------------------------------------------
+    # Range crossing transition
+    # -----------------------------------------------------
+
+    elif law_info["status"] == "CROSS_TRANSITION":
+
+        st.error(
+            "❌ ఈ incident period 01-07-2024ను cross చేస్తోంది.\n\n"
+            "Exact occurrence date లేకుండా automatic legal framework "
+            "select చేయడం సురక్షితం కాదు."
+        )
+
+
+    # -----------------------------------------------------
+    # START ANALYSIS
+    # -----------------------------------------------------
 
     else:
 
-        st.subheader("🔎 Applicable Law")
+        st.subheader(
+            "🔎 Applicable Law"
+        )
 
-        if law_info["status"] == "OLD_PENDING":
 
-            st.warning(
-                "IPC / CrPC / Indian Evidence Act\n"
-                "Old pending proceeding – savings/transitional provisions apply."
-            )
-
-        elif law_info["status"] == "OLD":
+        if law_info["status"] in [
+            "OLD",
+            "OLD_RANGE",
+            "OLD_PENDING"
+        ]:
 
             st.warning(
                 "IPC / CrPC / Indian Evidence Act"
             )
 
-        else:
+
+        elif law_info["status"] in [
+            "NEW",
+            "NEW_RANGE"
+        ]:
 
             st.success(
                 "BNS / BNSS / BSA"
             )
 
-        st.write(
-            f"**Incident Date:** "
-            f"{incident_date.strftime('%d-%m-%Y')}"
-        )
 
         st.write(
-            f"**Reason:** {law_info['reason']}"
+            "**Reason:** "
+            + law_info["reason"]
         )
+
 
         with st.spinner(
-            "Legal analysis తయారు చేస్తోంది... "
+            "⚖️ Legal analysis తయారు చేస్తోంది..."
         ):
 
             result = investigate_case(
+
                 combined_text,
+
                 law_info,
+
+                incident_info,
+
+                reference_date,
+
                 old_pending
             )
 
-        st.subheader("📋 Legal Analysis Result")
 
-        st.markdown(result)
+        st.subheader(
+            "📋 Legal Analysis Result"
+        )
+
+
+        st.markdown(
+            result
+        )
 
 
 # =========================================================
@@ -1060,8 +2052,9 @@ if st.button(
 
 st.divider()
 
+
 st.caption(
-    "⚠️ This tool is for investigation-support and legal research only. "
-    "Final legal action should be verified against the official statute, "
-    "notifications, court orders and case-specific facts."
+    "⚠️ ఈ tool investigation-support మరియు legal research కోసం మాత్రమే. "
+    "Final legal actionకు ముందు official statute, notifications, "
+    "court orders మరియు case-specific facts verify చేయాలి."
 )
