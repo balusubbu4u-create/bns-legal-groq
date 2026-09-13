@@ -1,8 +1,9 @@
 import streamlit as st
 from groq import Groq
 from pypdf import PdfReader
-import base64
 import io
+import base64
+
 
 # =========================================================
 # PAGE SETTINGS
@@ -14,26 +15,45 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("⚖️ BNS, BNSS & BSA లీగల్ & దర్యాప్తు అసిస్టెంట్")
-st.caption(
-    "BNS / IPC • BNSS / CrPC • BSA / IEA "
-    "— చట్టపరమైన విశ్లేషణ మరియు దర్యాప్తు సహాయక సాధనం"
-)
 
 # =========================================================
-# API KEY
+# TITLE
+# =========================================================
+
+st.title("⚖️ BNS, BNSS & BSA లీగల్ & దర్యాప్తు అసిస్టెంట్")
+
+st.caption(
+    "BNS, BNSS, BSA మరియు పాత IPC, CrPC, IEA చట్టాల ఆధారంగా "
+    "కేసు వివరాల విశ్లేషణ"
+)
+
+
+# =========================================================
+# GROQ API KEY CHECK
 # =========================================================
 
 if "GROQ_API_KEY" not in st.secrets:
+
     st.error(
-        "Streamlit Secrets లో GROQ_API_KEY కనిపించలేదు. "
-        "App Settings → Secrets లో GROQ_API_KEY నమోదు చేయండి."
+        "❌ GROQ_API_KEY కనిపించలేదు.\n\n"
+        "Streamlit → App Settings → Secrets లో "
+        "GROQ_API_KEY నమోదు చేయండి."
     )
+
     st.stop()
+
 
 api_key = st.secrets["GROQ_API_KEY"]
 
-client = Groq(api_key=api_key)
+
+# =========================================================
+# GROQ CLIENT
+# =========================================================
+
+client = Groq(
+    api_key=api_key
+)
+
 
 # =========================================================
 # MODEL SETTINGS
@@ -41,591 +61,867 @@ client = Groq(api_key=api_key)
 
 st.sidebar.header("⚙️ AI Model")
 
-# Text + image analysis కోసం current vision-capable model
-# =========================================================
-# MODEL SETTINGS
-# =========================================================
-
-st.sidebar.header("⚙️ AI Model")
-
-# Qwen model ప్రస్తుతం పనిచేస్తున్నందున దీనినే ఉపయోగిస్తున్నాం
+# ప్రస్తుతం పనిచేస్తున్న Qwen model
 selected_model = "qwen/qwen3.6-27b"
 
 st.sidebar.success(
-    f"✅ Active Model: {selected_model}"
-)
+    f"✅ Active Model:\n{selected_model}"
 )
 
-st.sidebar.info(
-    "📌 Screenshot / JPG / PNG analysis కోసం "
-    "vision-capable model అవసరం."
-)
+
+# =========================================================
+# SIDEBAR INFORMATION
+# =========================================================
 
 st.sidebar.markdown("---")
 
-st.sidebar.markdown(
-    """
-### 📚 Analysis Areas
+st.sidebar.subheader("📚 Laws Covered")
 
-- BNS ↔ IPC
-- BNSS ↔ CrPC
-- BSA ↔ IEA
-- Cognizable / Non-Cognizable
-- Bailable / Non-Bailable
-- Punishment
-- Investigation SOP
-- Digital Evidence
-- IO Checklist
-"""
+st.sidebar.write("• BNS – Bharatiya Nyaya Sanhita")
+st.sidebar.write("• BNSS – Bharatiya Nagarik Suraksha Sanhita")
+st.sidebar.write("• BSA – Bharatiya Sakshya Adhiniyam")
+
+st.sidebar.markdown("---")
+
+st.sidebar.info(
+    "⚠️ AI ఇచ్చే legal analysis ను "
+    "అధికారిక చట్ట గ్రంథం / అధికారిక నోటిఫికేషన్‌తో "
+    "తప్పనిసరిగా verify చేయండి."
 )
-
-# =========================================================
-# FILE UPLOAD
-# =========================================================
-
-st.subheader("📂 Complaint / Evidence Upload")
-
-uploaded_file = st.file_uploader(
-    "PDF / TXT / JPG / JPEG / PNG / WEBP ఫైల్ ఎంచుకోండి",
-    type=[
-        "pdf",
-        "txt",
-        "jpg",
-        "jpeg",
-        "png",
-        "webp"
-    ],
-    help="Complaint PDF, text file లేదా screenshot/image upload చేయవచ్చు."
-)
-
-case_text = ""
-image_data = None
-image_mime = None
-
-# =========================================================
-# TEXT INPUT
-# =========================================================
-
-tab1, tab2 = st.tabs(
-    ["📝 Text Details", "📁 File / Screenshot"]
-)
-
-with tab1:
-
-    text_input = st.text_area(
-        "ఫిర్యాదు / కేసు వివరాలు:",
-        height=220,
-        placeholder=(
-            "ఉదాహరణ:\n"
-            "అర్ధరాత్రి ఇంట్లోకి ప్రవేశించి వస్తువులు తీసుకెళ్లారు. "
-            "బాధితుడిని కొట్టారు మరియు బెదిరించారు..."
-        )
-    )
-
-    if text_input.strip():
-        case_text = text_input.strip()
-
-
-# =========================================================
-# FILE PROCESSING
-# =========================================================
-
-with tab2:
-
-    if uploaded_file:
-
-        file_name = uploaded_file.name.lower()
-        file_bytes = uploaded_file.getvalue()
-
-        # -------------------------------------------------
-        # PDF
-        # -------------------------------------------------
-
-        if file_name.endswith(".pdf"):
-
-            try:
-
-                reader = PdfReader(
-                    io.BytesIO(file_bytes)
-                )
-
-                extracted_pages = []
-
-                for page in reader.pages:
-
-                    page_text = page.extract_text()
-
-                    if page_text:
-                        extracted_pages.append(page_text)
-
-                case_text = "\n\n".join(extracted_pages)
-
-                if case_text.strip():
-
-                    st.success(
-                        f"✅ PDF చదవబడింది: {uploaded_file.name}"
-                    )
-
-                    with st.expander("📄 Extracted PDF Text"):
-                        st.text(case_text[:10000])
-
-                else:
-
-                    st.warning(
-                        "⚠️ ఈ PDFలో selectable text కనిపించలేదు. "
-                        "ఇది scanned PDF అయితే screenshot/imageగా upload చేయండి."
-                    )
-
-            except Exception as e:
-
-                st.error(
-                    f"PDF చదవడంలో సమస్య: {e}"
-                )
-
-        # -------------------------------------------------
-        # TXT
-        # -------------------------------------------------
-
-        elif file_name.endswith(".txt"):
-
-            try:
-
-                case_text = file_bytes.decode(
-                    "utf-8",
-                    errors="ignore"
-                )
-
-                st.success(
-                    f"✅ Text file చదవబడింది: {uploaded_file.name}"
-                )
-
-                with st.expander("📝 Text Preview"):
-                    st.text(case_text[:10000])
-
-            except Exception as e:
-
-                st.error(
-                    f"TXT చదవడంలో సమస్య: {e}"
-                )
-
-        # -------------------------------------------------
-        # IMAGE
-        # -------------------------------------------------
-
-        elif file_name.endswith(
-            (".jpg", ".jpeg", ".png", ".webp")
-        ):
-
-            image_data = base64.b64encode(
-                file_bytes
-            ).decode("utf-8")
-
-            if file_name.endswith(".png"):
-                image_mime = "image/png"
-
-            elif file_name.endswith(".webp"):
-                image_mime = "image/webp"
-
-            else:
-                image_mime = "image/jpeg"
-
-            st.success(
-                f"✅ Image loaded: {uploaded_file.name}"
-            )
-
-            st.image(
-                file_bytes,
-                caption="Uploaded Complaint / Screenshot",
-                use_container_width=True
-            )
 
 
 # =========================================================
 # LEGAL SYSTEM PROMPT
 # =========================================================
 
-LEGAL_SYSTEM_PROMPT = r"""
-మీరు భారతదేశ క్రిమినల్ చట్టాలపై సహాయక Legal & Investigation
-Analysis Assistant.
+LEGAL_SYSTEM_PROMPT = """
 
-మీరు BNS 2023, BNSS 2023, BSA 2023 మరియు పాత IPC 1860,
-CrPC 1973, Indian Evidence Act 1872 మధ్య సంబంధాన్ని
-చాలా జాగ్రత్తగా విశ్లేషించాలి.
+మీరు భారతదేశ క్రిమినల్ లా గురించి విశ్లేషించే Legal & Investigation Assistant.
 
-============================================================
-🚨 ABSOLUTE LEGAL ACCURACY RULES
-============================================================
+ప్రధానంగా క్రింది చట్టాలను ఉపయోగించాలి:
 
-1. SECTION NUMBER ఎప్పుడూ ఊహించకూడదు.
+1. Bharatiya Nyaya Sanhita, 2023 (BNS)
+2. Bharatiya Nagarik Suraksha Sanhita, 2023 (BNSS)
+3. Bharatiya Sakshya Adhiniyam, 2023 (BSA)
 
-2. Complaint factsలో లేని నేరాన్ని జోడించకూడదు.
+అవసరమైనప్పుడు పాత చట్టాలతో comparison ఇవ్వాలి:
 
-3. BNS ↔ IPC correspondenceను section-number similarity
-   ఆధారంగా తయారు చేయకూడదు.
+4. Indian Penal Code, 1860 (IPC)
+5. Code of Criminal Procedure, 1973 (CrPC)
+6. Indian Evidence Act, 1872 (IEA)
 
-4. Direct corresponding provision ఖచ్చితంగా తెలియకపోతే:
 
-   "Direct correspondence not established —
-    legal verification required"
+==============================
+VERY IMPORTANT ACCURACY RULES
+==============================
 
-   అని రాయాలి.
+• Section number ఊహించి చెప్పకూడదు.
 
-5. ఒక BNS sectionకు IPCలో direct equivalent లేకపోతే
-   false equivalent ఇవ్వకూడదు.
+• BNS section ను IPC section తో compare చేసేటప్పుడు
+  exact correspondence లేకపోతే "exact equivalent కాదు" అని చెప్పాలి.
 
-6. ఒక IPC sectionకు BNSలో direct equivalent లేకపోతే
-   false equivalent ఇవ్వకూడదు.
+• ఒక offence పేరు చూసి section number guess చేయకూడదు.
 
-7. "No direct corresponding provision" అనేది valid answer.
+• Facts ఆధారంగా offence elements ను ముందుగా గుర్తించాలి.
 
-8. Punishment, fine, cognizable/non-cognizable,
-   bailable/non-bailable విషయాలను కూడా ఊహించకూడదు.
+• Punishment, cognizable, non-cognizable, bailable,
+  non-bailable వంటి విషయాలు చెప్పేటప్పుడు section
+  applicability ని జాగ్రత్తగా పరిశీలించాలి.
 
-9. Investigation procedure sectionను offence sectionతో
-   కలపకూడదు.
+• BNSS procedure sections ను BNS offence sections తో
+  కలపకూడదు.
 
-10. Arrest section, remand section, charge-sheet section,
-    evidence section వేర్వేరు విషయాలు.
+• BSA evidence sections ను BNS offence sections తో
+  కలపకూడదు.
 
-11. 60/90 days విషయాన్ని automatic "charge-sheet deadline"
-    అని చెప్పకూడదు. అది statutory custody/default-bail
-    frameworkతో సంబంధం ఉన్న విషయం కావచ్చు.
+• ఏదైనా section గురించి ఖచ్చితంగా తెలియకపోతే
+  తప్పు section చెప్పడం కంటే verification అవసరం అని చెప్పాలి.
 
-12. BNSS 193 మరియు BNSS 187 వంటి procedural provisionsను
-    వేర్వేరుగా analyse చేయాలి.
 
-13. BSA Section 63 electronic evidence విషయాన్ని
-    fact-specificగా explain చేయాలి.
+==============================
+LEGAL ANALYSIS FORMAT
+==============================
 
-14. "BSA 63 = every electronic evidence automatically
-    needs one identical certificate" అని blanket statement
-    ఇవ్వకూడదు.
+కేసు వివరాలను ఈ క్రమంలో విశ్లేషించండి:
 
-15. Legal uncertainty ఉంటే:
+1. సంఘటన సారాంశం
 
-    ⚠️ LEGAL VERIFICATION REQUIRED
+2. ప్రధాన allegations
 
-    అని స్పష్టంగా చూపించాలి.
+3. Possible offences
 
-============================================================
-📚 CORRESPONDENCE RULE
-============================================================
+4. ప్రతి offence కు:
+   - BNS Section
+   - Offence name
+   - ఎందుకు apply అవుతుంది
+   - Punishment
+   - Cognizable / Non-Cognizable
+   - Bailable / Non-Bailable
 
-ప్రతి offenceకు ఈ format ఉపయోగించాలి:
+5. Old IPC equivalent
+   - Exact equivalent ఉంటే మాత్రమే చెప్పాలి
+   - లేకపోతే "Exact equivalent కాదు" అని చెప్పాలి
 
-OFFENCE
--------
-Facts:
+6. BNSS procedural provisions
 
-Possible BNS Section:
-Possible IPC Section:
+7. BSA evidence provisions
 
-Direct Correspondence:
-YES / NO / REQUIRES VERIFICATION
+8. Investigation steps
 
-BNS Provision:
-...
+9. IO Checklist
 
-IPC Provision:
-...
+10. Digital Evidence
 
-Punishment:
-...
+11. CCTV / Mobile / CDR / WhatsApp / Social Media evidence
 
-Cognizable:
-...
+12. అవసరమైన documents / witnesses
 
-Bailable:
-...
+13. Final legal observations
 
-Verification Status:
-HIGH / MEDIUM / REQUIRES LEGAL VERIFICATION
 
+==============================
+INVESTIGATION GUIDANCE
+==============================
 
-============================================================
-⚠️ IMPORTANT
-============================================================
+అవసరమైనప్పుడు:
 
-AI memory ద్వారా IPC → BNS mapping తయారు చేయకూడదు.
+• FIR registration
+• Preliminary enquiry
+• Scene of offence
+• Scene documentation
+• Witness examination
+• CCTV collection
+• Electronic evidence preservation
+• Mobile / digital evidence
+• Seizure procedure
+• Search procedure
+• Arrest considerations
+• Medical evidence
+• Documentary evidence
+• Case diary
+• Final report / charge sheet
 
-Known correspondence లేకపోతే guess చేయకూడదు.
+వంటి అంశాలను practical investigation checklist రూపంలో ఇవ్వండి.
 
-ఉదాహరణకు:
 
-❌ "IPC 454 కాబట్టి BNS 305"
+==============================
+ELECTRONIC EVIDENCE
+==============================
 
-అని number pattern ఆధారంగా నిర్ణయించకూడదు.
+Electronic evidence విషయంలో:
 
-Facts మరియు statutory offence elements ఆధారంగా మాత్రమే
-correspondence analyse చేయాలి.
+• CCTV
+• Mobile phone
+• Computer
+• DVR/NVR
+• Call records
+• WhatsApp chats
+• Emails
+• Digital photographs
+• Audio/video recordings
+• GPS/location data
 
-============================================================
-📋 REPORT FORMAT
-============================================================
+వంటి evidence గురించి చెప్పేటప్పుడు BSA provisions
+మరియు certificate requirements ను facts ఆధారంగా వివరించాలి.
 
-### 1. CASE FACTS
+BSA Section 63 గురించి చెప్పేటప్పుడు:
+ప్రతి electronic evidence కు ఒకే విధమైన blanket statement
+ఇవ్వకూడదు.
 
-Complaintలో నిజంగా ఉన్న facts మాత్రమే.
+Evidence source, device, lawful control, working condition,
+hash/value మరియు applicable certificate requirements
+వంటి అంశాలను context ప్రకారం వివరించాలి.
 
-### 2. POSSIBLE OFFENCES
 
-ప్రతి offence విడిగా.
+==============================
+LANGUAGE
+==============================
 
-### 3. BNS ↔ IPC COMPARISON
+User Telugu లో అడిగితే Telugu లో సమాధానం ఇవ్వాలి.
 
-Table format:
+Legal section names English లో ఉంచవచ్చు.
 
-| Offence | BNS | IPC | Direct Correspondence | Verification |
-|---|---|---|---|---|
+అవసరమైన చోట English + Telugu explanation ఇవ్వాలి.
 
-### 4. PUNISHMENT & CLASSIFICATION
+చాలా technical legal terminology ఉంటే దాని simple Telugu meaning కూడా ఇవ్వాలి.
 
-| Section | Punishment | Cognizable | Bailable |
-|---|---|---|---|
 
-### 5. BNSS INVESTIGATION PROCEDURE
+==============================
+IMPORTANT DISCLAIMER
+==============================
 
-FIR
-↓
-Scene preservation
-↓
-Witnesses
-↓
-Evidence
-↓
-Search / seizure
-↓
-Arrest if legally necessary
-↓
-Remand where applicable
-↓
-Forensic evidence
-↓
-Electronic evidence
-↓
-Police report / charge-sheet
-
-ప్రతి stepకు సరైన BNSS provisionను మాత్రమే ఇవ్వాలి.
-
-### 6. DIGITAL / ELECTRONIC EVIDENCE
-
-CCTV
-Mobile
-CDR
-GPS
-WhatsApp
-Photos
-Videos
-Computer records
-
-వాటికి BSA applicabilityను explain చేయాలి.
-
-### 7. IO CHECKLIST
-
-[ ] FIR
-[ ] Scene inspection
-[ ] Photographs / video
-[ ] Witness statements
-[ ] Medical evidence where relevant
-[ ] Search / seizure
-[ ] Seizure mahazar
-[ ] CCTV preservation
-[ ] Digital evidence
-[ ] FSL / forensic examination where applicable
-[ ] Accused examination / arrest where legally necessary
-[ ] Case diary
-[ ] Final police report
-
-### 8. IMPORTANT LEGAL WARNINGS
-
-ఏ section / mapping / procedureపై uncertainty ఉందో
-విడిగా చూపించాలి.
-
-చివరగా:
-
-"గమనిక: ఇది ప్రాథమిక legal information మరియు
-investigation assistance కోసం మాత్రమే. తుది చట్టపరమైన
-నిర్ణయం కోసం అధికారిక చట్ట పాఠ్యం, సంబంధిత Schedule/
-Corresponding Table మరియు అవసరమైతే న్యాయ నిపుణుల
-సలహాను పరిశీలించాలి."
-
-============================================================
-"""
-
-# =========================================================
-# IMAGE PROMPT
-# =========================================================
-
-IMAGE_INSTRUCTION = """
-ఈ image/screenshotలో ఉన్న complaint లేదా document textను
-ముందుగా జాగ్రత్తగా చదవండి.
-
-1. కనిపించే textను తప్పుగా ఊహించకండి.
-2. చదవలేని పదాలను [ILLEGIBLE]గా గుర్తించండి.
-3. ముందుగా facts extract చేయండి.
-4. తరువాత legal analysis చేయండి.
-5. Imageలో లేని factsను కల్పించకండి.
+ఇది legal research / investigation assistance కోసం మాత్రమే.
+Final legal decision కోసం official legislation, government
+notifications, competent authority instructions మరియు
+qualified legal professional verification అవసరం.
 """
 
 
 # =========================================================
-# ANALYSIS FUNCTION
+# FILE EXTRACTION FUNCTIONS
 # =========================================================
 
-def analyse_text(text):
-
-    response = client.chat.completions.create(
-
-        model=selected_model,
-
-        temperature=0.0,
-
-        max_completion_tokens=8000,
-
-        messages=[
-            {
-                "role": "system",
-                "content": LEGAL_SYSTEM_PROMPT
-            },
-            {
-                "role": "user",
-                "content": (
-                    "క్రింది complaint factsను మాత్రమే ఆధారంగా "
-                    "legal analysis చేయండి.\n\n"
-                    + text[:12000]
-                )
-            }
-        ]
-    )
-
-    return response.choices[0].message.content
-
-
-def analyse_image(image_b64, mime_type):
-
-    response = client.chat.completions.create(
-
-        model=selected_model,
-
-        temperature=0.0,
-
-        max_completion_tokens=8000,
-
-        messages=[
-            {
-                "role": "system",
-                "content": LEGAL_SYSTEM_PROMPT
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": IMAGE_INSTRUCTION
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": (
-                                f"data:{mime_type};base64,"
-                                f"{image_b64}"
-                            )
-                        }
-                    }
-                ]
-            }
-        ]
-    )
-
-    return response.choices[0].message.content
-
-
-# =========================================================
-# ANALYSE BUTTON
-# =========================================================
-
-st.markdown("---")
-
-if st.button(
-    "🔍 కేస్ విశ్లేషించి దర్యాప్తు నివేదిక రూపొందించండి",
-    type="primary",
-    use_container_width=True
-):
-
-    if not case_text.strip() and not image_data:
-
-        st.warning(
-            "దయచేసి complaint text లేదా PDF/TXT/image upload చేయండి."
-        )
-
-        st.stop()
+def extract_pdf_text(file_bytes):
 
     try:
 
-        with st.spinner(
-            f"⚖️ {selected_model} ద్వారా analysis జరుగుతోంది..."
-        ):
-
-            # ---------------------------------------------
-            # IMAGE
-            # ---------------------------------------------
-
-            if image_data:
-
-                result = analyse_image(
-                    image_data,
-                    image_mime
-                )
-
-            # ---------------------------------------------
-            # TEXT / PDF / TXT
-            # ---------------------------------------------
-
-            else:
-
-                result = analyse_text(
-                    case_text
-                )
-
-        # =================================================
-        # RESULT
-        # =================================================
-
-        st.markdown("---")
-
-        st.header(
-            "📋 సమగ్ర దర్యాప్తు & చట్టపరమైన విశ్లేషణ"
+        pdf = PdfReader(
+            io.BytesIO(file_bytes)
         )
 
-        st.markdown(result)
+        text = ""
 
-        # =================================================
-        # DOWNLOAD
-        # =================================================
+        for page in pdf.pages:
 
-        st.download_button(
+            page_text = page.extract_text()
 
-            label="📥 నివేదికను TXTగా Download చేయండి",
+            if page_text:
+                text += page_text + "\n"
 
-            data=result,
+        return text
 
-            file_name="BNS_Legal_Investigation_Report.txt",
+    except Exception as e:
 
-            mime="text/plain",
+        return f"PDF చదవడంలో error: {str(e)}"
 
-            use_container_width=True
+
+def extract_text_file(file_bytes):
+
+    try:
+
+        return file_bytes.decode(
+            "utf-8",
+            errors="ignore"
         )
 
     except Exception as e:
 
-        st.error(
-            f"❌ Analysisలో error వచ్చింది:\n\n{e}"
+        return f"Text file చదవడంలో error: {str(e)}"
+
+
+# =========================================================
+# IMAGE ANALYSIS
+# =========================================================
+
+def analyze_image(
+    image_bytes,
+    mime_type,
+    user_prompt
+):
+
+    try:
+
+        encoded_image = base64.b64encode(
+            image_bytes
+        ).decode("utf-8")
+
+
+        response = client.chat.completions.create(
+
+            model=selected_model,
+
+            messages=[
+
+                {
+                    "role": "system",
+                    "content": LEGAL_SYSTEM_PROMPT
+                },
+
+                {
+                    "role": "user",
+
+                    "content": [
+
+                        {
+                            "type": "text",
+
+                            "text": user_prompt
+                        },
+
+                        {
+                            "type": "image_url",
+
+                            "image_url": {
+
+                                "url":
+                                f"data:{mime_type};base64,{encoded_image}"
+
+                            }
+                        }
+
+                    ]
+                }
+
+            ],
+
+            temperature=0.1,
+
+            max_tokens=6000
+
         )
 
-        st.info(
-            "Model పేరు లేదా Groq API availabilityను "
-            "చెక్ చేయండి."
+
+        return response.choices[0].message.content
+
+
+    except Exception as e:
+
+        return f"""
+❌ Image analysis error
+
+{str(e)}
+"""
+
+
+# =========================================================
+# TEXT ANALYSIS
+# =========================================================
+
+def analyze_text(user_prompt):
+
+    try:
+
+        response = client.chat.completions.create(
+
+            model=selected_model,
+
+            messages=[
+
+                {
+                    "role": "system",
+
+                    "content": LEGAL_SYSTEM_PROMPT
+                },
+
+                {
+                    "role": "user",
+
+                    "content": user_prompt
+                }
+
+            ],
+
+            temperature=0.1,
+
+            max_tokens=6000
+
         )
+
+
+        return response.choices[0].message.content
+
+
+    except Exception as e:
+
+        return f"""
+❌ AI analysis error
+
+{str(e)}
+"""
+
+
+# =========================================================
+# MAIN TABS
+# =========================================================
+
+tab1, tab2 = st.tabs(
+    [
+        "📝 Text Details",
+        "📷 Photo / Document"
+    ]
+)
+
+
+# =========================================================
+# TAB 1 - TEXT
+# =========================================================
+
+with tab1:
+
+    st.subheader(
+        "📝 కేసు వివరాలు నమోదు చేయండి"
+    )
+
+    case_text = st.text_area(
+
+        "Case / Complaint Details",
+
+        height=300,
+
+        placeholder=(
+            "ఉదాహరణ:\n"
+            "సంఘటన తేదీ...\n"
+            "సంఘటన జరిగిన ప్రదేశం...\n"
+            "ఎవరెవరు పాల్గొన్నారు...\n"
+            "ఏం జరిగింది...\n"
+            "గాయాలు / నష్టం...\n"
+            "CCTV / Mobile / ఇతర evidence..."
+        )
+
+    )
+
+
+    if st.button(
+        "⚖️ Legal Analysis",
+        type="primary",
+        key="text_analysis"
+    ):
+
+        if not case_text.strip():
+
+            st.warning(
+                "⚠️ ముందుగా కేసు వివరాలు నమోదు చేయండి."
+            )
+
+        else:
+
+            with st.spinner(
+                "🔎 Legal analysis జరుగుతోంది..."
+            ):
+
+                prompt = f"""
+
+క్రింది కేసు వివరాలను పూర్తిగా విశ్లేషించండి.
+
+CASE DETAILS:
+
+{case_text}
+
+
+క్రింది headings తప్పనిసరిగా ఉపయోగించండి:
+
+## 1. సంఘటన సారాంశం
+
+## 2. ప్రధాన Allegations
+
+## 3. Possible BNS Offences
+
+## 4. BNS Section-wise Analysis
+
+## 5. IPC Comparison
+
+## 6. Punishment
+
+## 7. Cognizable / Non-Cognizable
+
+## 8. Bailable / Non-Bailable
+
+## 9. BNSS Procedure
+
+## 10. BSA Evidence
+
+## 11. Digital Evidence
+
+## 12. Investigation Steps
+
+## 13. IO Checklist
+
+## 14. Documents / Witnesses Required
+
+## 15. Final Legal Observations
+
+
+IMPORTANT:
+
+Section numbers guess చేయకండి.
+
+Facts సరిపోకపోతే additional facts required అని చెప్పండి.
+
+IPC equivalent exact కాకపోతే exact equivalent కాదు అని స్పష్టంగా చెప్పండి.
+"""
+
+
+                result = analyze_text(
+                    prompt
+                )
+
+
+            st.markdown("---")
+
+            st.subheader(
+                "📋 Legal Analysis Result"
+            )
+
+            st.markdown(result)
+
+
+            st.download_button(
+
+                label="📥 Download Report",
+
+                data=result,
+
+                file_name="legal_analysis.txt",
+
+                mime="text/plain",
+
+                key="download_text_report"
+
+            )
+
+
+# =========================================================
+# TAB 2 - PHOTO / DOCUMENT
+# =========================================================
+
+with tab2:
+
+    st.subheader(
+        "📷 Complaint / Document Upload"
+    )
+
+    uploaded_file = st.file_uploader(
+
+        "PDF / TXT / JPG / JPEG / PNG / WEBP upload చేయండి",
+
+        type=[
+            "pdf",
+            "txt",
+            "jpg",
+            "jpeg",
+            "png",
+            "webp"
+        ]
+
+    )
+
+
+    if uploaded_file is not None:
+
+        file_bytes = uploaded_file.read()
+
+        file_name = uploaded_file.name.lower()
+
+
+        st.success(
+            f"✅ File uploaded: {uploaded_file.name}"
+        )
+
+
+        # -------------------------------------------------
+        # IMAGE FILE
+        # -------------------------------------------------
+
+        if file_name.endswith(
+            (
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".webp"
+            )
+        ):
+
+            st.image(
+                file_bytes,
+                caption="Uploaded Image",
+                use_container_width=True
+            )
+
+
+            if st.button(
+                "🔎 Analyze Image",
+                type="primary",
+                key="image_analysis"
+            ):
+
+                with st.spinner(
+                    "📷 Image చదివి legal analysis చేస్తున్నాను..."
+                ):
+
+                    mime_type = uploaded_file.type
+
+                    prompt = """
+
+ఈ uploaded complaint/document image ను చదవండి.
+
+ముందుగా image లో ఉన్న text ను అర్థం చేసుకోండి.
+
+తర్వాత క్రింది అంశాలను విశ్లేషించండి:
+
+1. Complaint Summary
+2. Allegations
+3. Important Facts
+4. Possible BNS Offences
+5. Relevant BNS Sections
+6. IPC Comparison
+7. Punishment
+8. Cognizable / Non-Cognizable
+9. Bailable / Non-Bailable
+10. BNSS Procedure
+11. BSA Evidence
+12. Digital Evidence
+13. Investigation Steps
+14. IO Checklist
+15. Documents / Witnesses
+16. Final Observations
+
+IMPORTANT:
+
+Image లో section number కనిపిస్తే దానిని blindly trust చేయకండి.
+
+Facts ఆధారంగా section applicability verify చేయాలి.
+
+Section number ఖచ్చితంగా తెలియకపోతే guess చేయకండి.
+"""
+
+
+                    result = analyze_image(
+
+                        file_bytes,
+
+                        mime_type,
+
+                        prompt
+
+                    )
+
+
+                st.markdown("---")
+
+                st.subheader(
+                    "📋 Image Legal Analysis"
+                )
+
+                st.markdown(result)
+
+
+                st.download_button(
+
+                    label="📥 Download Report",
+
+                    data=result,
+
+                    file_name="image_legal_analysis.txt",
+
+                    mime="text/plain",
+
+                    key="download_image_report"
+
+                )
+
+
+        # -------------------------------------------------
+        # PDF FILE
+        # -------------------------------------------------
+
+        elif file_name.endswith(".pdf"):
+
+            if st.button(
+                "📄 Analyze PDF",
+                type="primary",
+                key="pdf_analysis"
+            ):
+
+                with st.spinner(
+                    "📄 PDF చదువుతున్నాను..."
+                ):
+
+                    pdf_text = extract_pdf_text(
+                        file_bytes
+                    )
+
+
+                if not pdf_text.strip():
+
+                    st.error(
+                        "❌ PDF లో readable text కనిపించలేదు."
+                    )
+
+                    st.info(
+                        "Scanned PDF అయితే PDF pages ను images గా upload చేయండి."
+                    )
+
+                else:
+
+                    prompt = f"""
+
+క్రింది PDF complaint/document text ను
+legal investigation perspective నుండి విశ్లేషించండి.
+
+
+DOCUMENT TEXT:
+
+{pdf_text}
+
+
+ఈ headings ఉపయోగించండి:
+
+## 1. Complaint Summary
+
+## 2. Important Facts
+
+## 3. Allegations
+
+## 4. Possible BNS Offences
+
+## 5. BNS Sections
+
+## 6. IPC Comparison
+
+## 7. Punishment
+
+## 8. Cognizable / Non-Cognizable
+
+## 9. Bailable / Non-Bailable
+
+## 10. BNSS Procedure
+
+## 11. BSA Evidence
+
+## 12. Digital Evidence
+
+## 13. Investigation Steps
+
+## 14. IO Checklist
+
+## 15. Documents / Witnesses
+
+## 16. Final Observations
+
+
+IMPORTANT:
+
+Section numbers guess చేయకండి.
+
+Exact correspondence లేకపోతే
+"Exact equivalent కాదు" అని చెప్పండి.
+"""
+
+
+                    with st.spinner(
+                        "⚖️ Legal analysis జరుగుతోంది..."
+                    ):
+
+                        result = analyze_text(
+                            prompt
+                        )
+
+
+                    st.markdown("---")
+
+                    st.subheader(
+                        "📋 PDF Legal Analysis"
+                    )
+
+                    st.markdown(result)
+
+
+                    st.download_button(
+
+                        label="📥 Download Report",
+
+                        data=result,
+
+                        file_name="pdf_legal_analysis.txt",
+
+                        mime="text/plain",
+
+                        key="download_pdf_report"
+
+                    )
+
+
+        # -------------------------------------------------
+        # TXT FILE
+        # -------------------------------------------------
+
+        elif file_name.endswith(".txt"):
+
+            text_content = extract_text_file(
+                file_bytes
+            )
+
+
+            st.text_area(
+                "📄 File Content",
+                text_content,
+                height=300
+            )
+
+
+            if st.button(
+                "⚖️ Analyze TXT",
+                type="primary",
+                key="txt_analysis"
+            ):
+
+                prompt = f"""
+
+క్రింది complaint/case text ను
+BNS, BNSS, BSA perspective నుండి విశ్లేషించండి.
+
+
+CASE TEXT:
+
+{text_content}
+
+
+క్రింది headings ఉపయోగించండి:
+
+## 1. Summary
+
+## 2. Allegations
+
+## 3. Possible BNS Offences
+
+## 4. Relevant BNS Sections
+
+## 5. IPC Comparison
+
+## 6. Punishment
+
+## 7. Cognizable / Non-Cognizable
+
+## 8. Bailable / Non-Bailable
+
+## 9. BNSS Procedure
+
+## 10. BSA Evidence
+
+## 11. Investigation Steps
+
+## 12. IO Checklist
+
+## 13. Digital Evidence
+
+## 14. Final Observations
+
+
+Section numbers guess చేయకండి.
+"""
+
+
+                with st.spinner(
+                    "⚖️ Analysis జరుగుతోంది..."
+                ):
+
+                    result = analyze_text(
+                        prompt
+                    )
+
+
+                st.markdown("---")
+
+                st.subheader(
+                    "📋 TXT Legal Analysis"
+                )
+
+                st.markdown(result)
+
+
+                st.download_button(
+
+                    label="📥 Download Report",
+
+                    data=result,
+
+                    file_name="txt_legal_analysis.txt",
+
+                    mime="text/plain",
+
+                    key="download_txt_report"
+
+                )
 
 
 # =========================================================
@@ -635,8 +931,9 @@ if st.button(
 st.markdown("---")
 
 st.caption(
-    "⚠️ Legal Disclaimer: ఈ application ప్రాథమిక legal "
-    "information మరియు investigation assistance కోసం మాత్రమే. "
-    "తుది నిర్ణయం కోసం అధికారిక statute, schedules, "
-    "corresponding tables మరియు న్యాయ నిపుణుల సలహాను పరిశీలించాలి."
+    "⚖️ BNS, BNSS & BSA Legal & Investigation Assistant"
+)
+
+st.caption(
+    "AI-generated analysis should be verified with the applicable official legislation and legal authorities."
 )
