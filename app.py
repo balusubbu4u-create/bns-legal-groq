@@ -48,11 +48,11 @@ except Exception:
 
 
 # =========================================================
-# MODELS
+# MODELS (Fixed 404 Error by updating Vision Model)
 # =========================================================
 
-TEXT_MODEL = "openai/gpt-oss-120b"
-VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+TEXT_MODEL = "llama-3.3-70b-versatile"
+VISION_MODEL = "llama-3.2-11b-vision-preview"
 
 
 # =========================================================
