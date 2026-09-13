@@ -44,14 +44,11 @@ st.sidebar.header("⚙️ AI Model")
 # Text + image analysis కోసం current vision-capable model
 DEFAULT_MODEL = "qwen/qwen3.6-27b"
 
-selected_model = st.sidebar.selectbox(
-    "మోడల్ ఎంచుకోండి",
-    [
-        "qwen/qwen3.6-27b",
-        "qwen/qwen3.8-27b",
-        "openai/gpt-oss-120b",
-        "openai/gpt-oss-20b"
-    ],
+selected_model = "qwen/qwen3.6-27b"
+
+st.sidebar.success(
+    f"✅ Active Model: {selected_model}"
+)
     index=0
 )
 
