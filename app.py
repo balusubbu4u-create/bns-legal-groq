@@ -1,4 +1,4 @@
-```python
+
 import streamlit as st
 from groq import Groq
 from PIL import Image
