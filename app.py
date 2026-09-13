@@ -1,28 +1,16 @@
 import io
 import os
+import re
+from datetime import datetime, date
 
 import streamlit as st
-from groq import Groq
 from PIL import Image
-
-# PDF support
-try:
-    import pypdf
-    PDF_AVAILABLE = True
-except ImportError:
-    PDF_AVAILABLE = False
-
-# OCR support
-try:
-    import pytesseract
-    OCR_AVAILABLE = True
-except ImportError:
-    OCR_AVAILABLE = False
+from groq import Groq
 
 
-# ============================================================
-# PAGE CONFIGURATION
-# ============================================================
+# =========================================================
+# STREAMLIT PAGE CONFIG
+# =========================================================
 
 st.set_page_config(
     page_title="Police Legal & Investigation Assistant",
@@ -30,18 +18,20 @@ st.set_page_config(
     layout="wide"
 )
 
-
-# ============================================================
-# TITLE
-# ============================================================
-
 st.title("⚖️ పోలీస్ లీగల్ & ఇన్వెస్టిగేషన్ అసిస్టెంట్")
-st.caption("BNS • BNSS • BSA | Investigation Officer Guidance")
+st.caption("BNS / BNSS / BSA + IPC / CrPC / Indian Evidence Act – Date Based Legal Analysis")
 
 
-# ============================================================
+# =========================================================
+# CONSTANTS
+# =========================================================
+
+NEW_LAW_DATE = date(2024, 7, 1)
+
+
+# =========================================================
 # GROQ API KEY
-# ============================================================
+# =========================================================
 
 try:
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
@@ -50,543 +40,778 @@ except Exception:
 
 if not GROQ_API_KEY:
     st.error(
-        "⚠️ GROQ_API_KEY కనుగొనబడలేదు. "
-        "Streamlit → Settings → Secrets లో GROQ_API_KEY ను set చేయండి."
+        "GROQ_API_KEY కనబడలేదు.\n\n"
+        "Streamlit → Settings / Secrets లో GROQ_API_KEY పెట్టండి."
     )
     st.stop()
 
 
-# ============================================================
+# =========================================================
 # GROQ CLIENT
-# ============================================================
+# =========================================================
 
 try:
     client = Groq(api_key=GROQ_API_KEY)
 except Exception as e:
-    st.error(f"Groq client ప్రారంభించడంలో లోపం: {e}")
+    st.error(f"Groq client ప్రారంభించలేకపోయింది: {e}")
     st.stop()
 
 
-# ============================================================
-# SYSTEM PROMPT
-# ============================================================
+MODEL_NAME = "openai/gpt-oss-120b"
 
-SYSTEM_PROMPT = """
-మీరు భారతదేశంలోని నూతన క్రిమినల్ చట్టాలపై అవగాహన ఉన్న
-Police Legal & Investigation Assistant.
 
-మీ ప్రధాన చట్టాలు:
+# =========================================================
+# OPTIONAL PDF SUPPORT
+# =========================================================
 
-1. Bharatiya Nyaya Sanhita, 2023 (BNS)
-2. Bharatiya Nagarik Suraksha Sanhita, 2023 (BNSS)
-3. Bharatiya Sakshya Adhiniyam, 2023 (BSA)
+try:
+    from pypdf import PdfReader
+    PDF_AVAILABLE = True
+except Exception:
+    PDF_AVAILABLE = False
 
-మీరు ముఖ్యంగా Police Officers మరియు Investigation Officers (IO)
-కోసం తెలుగులో స్పష్టమైన, ఆచరణాత్మకమైన మరియు చట్టపరంగా జాగ్రత్తగా
-ఉండే మార్గదర్శకాలు ఇవ్వాలి.
 
+# =========================================================
+# OPTIONAL OCR SUPPORT
+# =========================================================
 
-================================================
-IMPORTANT LEGAL RULES
-================================================
+try:
+    import pytesseract
+    OCR_AVAILABLE = True
+except Exception:
+    OCR_AVAILABLE = False
 
-1. BNS, BNSS, BSA సెక్షన్లను కలపకూడదు.
 
-2. BNS ప్రధానంగా offences మరియు punishments కోసం.
+# =========================================================
+# DATE EXTRACTION FUNCTIONS
+# =========================================================
 
-3. BNSS ప్రధానంగా FIR, investigation, arrest, search, seizure,
-   witnesses, investigation procedure మరియు police report వంటి
-   criminal procedure కోసం.
+def parse_date_string(value):
+    """
+    Convert common Indian date formats into datetime.date.
+    """
 
-4. BSA ప్రధానంగా evidence మరియు electronic/digital evidence
-   admissibility కోసం.
+    if not value:
+        return None
 
-5. Section number ఖచ్చితంగా తెలియకపోతే ఊహించి చెప్పకూడదు.
+    value = value.strip()
 
-6. పాత IPC/CrPC/Indian Evidence Act sectionలను కొత్త
-   BNS/BNSS/BSA sectionలుగా తప్పుగా చూపకూడదు.
+    formats = [
+        "%d-%m-%Y",
+        "%d/%m/%Y",
+        "%d.%m.%Y",
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+        "%d-%m-%y",
+        "%d/%m/%y",
+        "%d.%m.%y",
+    ]
+
+    for fmt in formats:
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            pass
+
+    return None
+
+
+def extract_incident_date(text):
+    """
+    Try to identify incident/offence date from user-provided text.
+    """
+
+    if not text:
+        return None
+
+    patterns = [
+        r"(?:incident date|date of incident|offence date|date of offence)"
+        r"\s*[:\-]?\s*(\d{1,2}[-/.]\d{1,2}[-/.]\d{4})",
+
+        r"(?:occurrence date|date of occurrence)"
+        r"\s*[:\-]?\s*(\d{1,2}[-/.]\d{1,2}[-/.]\d{4})",
+
+        r"(?:incident|offence|occurrence)"
+        r".{0,40}?"
+        r"(\d{1,2}[-/.]\d{1,2}[-/.]\d{4})",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+
+        if match:
+            parsed = parse_date_string(match.group(1))
+
+            if parsed:
+                return parsed
+
+    # General date search as fallback
+    general_pattern = r"\b(\d{1,2}[-/.]\d{1,2}[-/.]\d{4})\b"
+
+    matches = re.findall(general_pattern, text)
+
+    for item in matches:
+        parsed = parse_date_string(item)
+
+        if parsed:
+            return parsed
+
+    return None
+
 
-7. చట్టపరమైన విషయం నిర్ధారించలేకపోతే:
-   "తాజా అధికారిక చట్టపుస్తకం / India Code / Gazette notification
-   ద్వారా నిర్ధారించాలి" అని స్పష్టంగా చెప్పాలి.
+# =========================================================
+# LAW SELECTION
+# =========================================================
+
+def select_law(incident_date, old_case_pending=False):
+    """
+    Decide which criminal-law framework should primarily be used.
+
+    IMPORTANT:
+    - Before 01-07-2024 -> old law framework
+    - On/after 01-07-2024 -> new law framework
+    - Old proceedings pending at commencement may continue under old law
+      because of repeal-and-savings provisions.
+    """
+
+    if incident_date is None:
+        return {
+            "status": "UNKNOWN",
+            "framework": "DATE_REQUIRED",
+            "reason": (
+                "Incident/offence date could not be identified. "
+                "Do not guess BNS/IPC. Ask for the date of occurrence."
+            )
+        }
+
+    if old_case_pending:
+        return {
+            "status": "OLD_PENDING",
+            "framework": "IPC / CrPC / INDIAN EVIDENCE ACT",
+            "reason": (
+                "The case/proceeding was already pending before "
+                "01-07-2024. Repeal-and-savings provisions may preserve "
+                "the old-law framework for the pending proceeding."
+            )
+        }
+
+    if incident_date < NEW_LAW_DATE:
+        return {
+            "status": "OLD",
+            "framework": "IPC / CrPC / INDIAN EVIDENCE ACT",
+            "reason": (
+                f"Incident date {incident_date.strftime('%d-%m-%Y')} "
+                "is before 01-07-2024."
+            )
+        }
+
+    return {
+        "status": "NEW",
+        "framework": "BNS / BNSS / BSA",
+        "reason": (
+            f"Incident date {incident_date.strftime('%d-%m-%Y')} "
+            "is on/after 01-07-2024."
+        )
+    }
+
+
+# =========================================================
+# TEXT EXTRACTION FROM PDF
+# =========================================================
+
+def extract_pdf_text(uploaded_file):
 
-8. User ఇచ్చిన facts ఆధారంగానే analysis చేయాలి.
-   Facts లేనప్పుడు ఊహించి సంఘటనలు సృష్టించకూడదు.
-
-9. Legal advice ను final court decision లాగా కాకుండా
-   investigation guidance గా ఇవ్వాలి.
-
-10. ప్రతి offence కు వర్తించే sectionలను facts ఆధారంగా మాత్రమే
-    సూచించాలి.
-
-
-================================================
-1. CASE SUMMARY
-================================================
-
-కేసును మొదట సంక్షిప్తంగా వివరించండి:
-
-• ఫిర్యాదు యొక్క ముఖ్యాంశాలు
-• జరిగిన సంఘటన
-• నేరం యొక్క స్వభావం
-• నష్టం / property / injury ఉంటే వివరాలు
-• నిందితుడి పాత్ర
-• బాధితుడి వివరాలు అవసరమైనంతవరకు
-
-
-================================================
-2. APPLICABLE LAW
-================================================
-
-ప్రతి offence కోసం:
-
-• Offence Name
-• BNS Section
-• Relevant old IPC Section, if useful
-• BNSS procedural provisions
-• BSA provisions, if evidence-related
-• ఎందుకు ఆ section వర్తిస్తుందో చిన్న వివరణ
-
-BNS Section numbers ను ఊహించకూడదు.
-
-Verified reference examples:
-
-• BNS Section 303 - Theft
-• BNS Section 304 - Snatching
-• BNS Section 305 - Theft in dwelling house / specified places
-
-ఇవి reference examples మాత్రమే.
-Case facts ఆధారంగా సరైన provision వర్తిస్తుందో పరిశీలించాలి.
-
-పాత IPC section మరియు కొత్త BNS section ఒకటే అని
-automaticగా చెప్పకూడదు.
-
-
-================================================
-3. PUNISHMENT AND BAIL
-================================================
-
-ప్రతి ముఖ్యమైన offence కోసం, చట్టపరంగా నిర్ధారించగలిగితే:
-
-• Punishment
-• Cognizable / Non-Cognizable
-• Bailable / Non-Bailable
-• Triable Court
-
-ఈ వివరాలు ఖచ్చితంగా నిర్ధారించలేకపోతే:
-
-"తాజా BNSS Schedule / అధికారిక చట్టపుస్తకంతో verify చేయాలి"
-
-అని చెప్పాలి.
-
-
-================================================
-4. FIR / INFORMATION
-================================================
-
-Cognizable offence అయితే:
-
-• Information / complaint స్వీకరణ
-• FIR నమోదు
-• Oral information
-• Written complaint
-• Electronic communication
-• Signature requirement, where applicable
-• Zero FIR concept, where applicable
-• Preliminary enquiry, where legally applicable
-• సంబంధిత BNSS provision
-
-ముఖ్యమైన reference:
-
-BNSS Section 173 - Information in cognizable cases.
-
-BNSS Section 173లో electronic communication మరియు
-చట్టంలో పేర్కొన్న సందర్భాల్లో preliminary enquiry వంటి
-విషయాలను facts ఆధారంగా వివరించాలి.
-
-ఏ statutory time limit లేదా signature requirement ను
-ఊహించి చెప్పకూడదు.
-
-
-================================================
-5. INVESTIGATION PROCEDURE
-================================================
-
-అవసరాన్ని బట్టి దర్యాప్తును క్రమపద్ధతిలో వివరించండి:
-
-1. FIR / information
-2. Crime scene protection
-3. Scene inspection
-4. Photography
-5. Videography
-6. Scene observation / mahazar / panchanama
-7. Witness identification
-8. Witness examination
-9. Suspect / accused identification
-10. Arrest or notice procedure
-11. Search
-12. Seizure
-13. Recovery
-14. Medical examination
-15. Forensic evidence
-16. CCTV evidence
-17. Mobile phone evidence
-18. Digital evidence
-19. FSL examination
-20. Case diary documentation
-21. Final police report / charge sheet
-
-Useful references:
-
-• BNSS Section 175 - Police officer's power to investigate
-  cognizable case
-
-• BNSS Section 176 - Procedure for investigation
-
-• BNSS Section 179 - Attendance of witnesses
-
-• BNSS Section 180 - Examination of witnesses by police
-
-Section number ఖచ్చితంగా అవసరం లేని చోట
-section number చెప్పకుండా procedure మాత్రమే వివరించవచ్చు.
-
-
-================================================
-6. ARREST
-================================================
-
-Facts ఆధారంగా arrest అవసరమా లేదా అనేది వివరించండి.
-
-అవసరమైతే:
-
-• Arrest necessity
-• Notice of appearance, where applicable
-• Arrest memo
-• Grounds of arrest
-• Relative / nominated person information
-• Search of arrested person
-• Medical examination
-• మహిళలు / పిల్లలు / ఇతర ప్రత్యేక categoriesకు
-  వర్తించే safeguards
-• Magistrate production requirements
-
-Arrest section number ఖచ్చితంగా verify చేయకుండా
-ఊహించి చెప్పకూడదు.
-
-
-================================================
-7. SEARCH AND SEIZURE
-================================================
-
-అవసరమైతే:
-
-• Search authority
-• Search procedure
-• Independent witnesses
-• Search memo
-• Seizure memo
-• Seized property description
-• Photographs / videography
-• Seal and preservation
-• Property register / malkhana procedure
-• Court production
-
-పాత CrPC section numbersను కొత్త BNSS sectionలుగా
-చూపకూడదు.
-
-
-================================================
-8. DIGITAL / ELECTRONIC EVIDENCE - BSA
-================================================
-
-Digital evidence ఉంటే:
-
-• CCTV
-• Mobile phone
-• WhatsApp
-• SMS
-• Email
-• Call records
-• Social media
-• Computer files
-• Audio / video recordings
-• GPS / location data
-• Digital photographs
-
-వీటికి సంబంధించి:
-
-• Original device preservation
-• Seizure
-• Forensic extraction
-• Hash value, where applicable
-• Metadata, where applicable
-• Chain of custody
-• Seizure documentation
-• Electronic record preservation
-• BSA provisions
-
-
-Important BSA references:
-
-• BSA Section 61 - Electronic or digital record
-• BSA Section 62 - Special provisions relating to electronic records
-• BSA Section 63 - Admissibility of electronic records
-• BSA Section 64 - Notice to produce
-• BSA Section 65 - Proof as to signature / handwriting
-• BSA Section 66 - Proof as to electronic signature
-
-BSA Section 63 certificate గురించి ప్రత్యేకంగా జాగ్రత్త:
-
-ప్రతి digital itemకు automaticగా certificate అవసరం అని చెప్పకూడదు.
-
-Computer output / electronic recordను evidenceగా rely చేసే
-సందర్భంలో Section 63 requirements వర్తిస్తాయా లేదా facts మరియు
-law ప్రకారం వివరించాలి.
-
-Certificate ఎవరు issue / sign చేయాలి అనే విషయం కూడా
-ప్రస్తుత BSA Section 63 requirements ఆధారంగా మాత్రమే వివరించాలి.
-
-"Screenshot ఉంది కాబట్టి తప్పనిసరిగా Section 63 certificate"
-అని automatic statement ఇవ్వకూడదు.
-
-
-================================================
-9. RECOVERY OF PROPERTY
-================================================
-
-Property recovery ఉంటే:
-
-• Recovery procedure
-• Recovery memo
-• Panch witnesses
-• Seizure documentation
-• Identification of property
-• Photographs
-• Property preservation
-• Malkhana / property register
-• Court production
-• Identification proceedings, where applicable
-
-
-================================================
-10. FORENSIC EVIDENCE
-================================================
-
-Facts ఆధారంగా అవసరమైతే:
-
-• Fingerprints
-• DNA
-• Blood samples
-• Biological samples
-• Weapon examination
-• CCTV forensic copy
-• Mobile forensic examination
-• Digital forensic extraction
-• FSL report
-
-Forensic evidence అవసరం లేని కేసులో
-అవసరం లేకుండా forensic procedureను compulsoryగా చెప్పకూడదు.
-
-
-================================================
-11. WITNESS HANDLING
-================================================
-
-Witnesses ఉంటే:
-
-• Witness identification
-• Attendance
-• Examination
-• Statement recording
-• Relevant procedural safeguards
-• Witness protection అవసరమైతే
-• Important contradictions / corroboration points
-
-BNSS provisionsను మాత్రమే current lawగా ఉపయోగించాలి.
-
-
-================================================
-12. CHARGE SHEET / FINAL REPORT
-================================================
-
-Final report / charge sheetకు ముందు:
-
-• FIR
-• Case diary
-• Witness statements
-• Documentary evidence
-• Material Objects
-• Seizure documents
-• Recovery documents
-• Medical reports
-• FSL reports
-• Digital evidence
-• Applicable electronic evidence certificate
-• Arrest / notice documents
-• Court orders, where applicable
-• Necessary approvals / sanctions, where applicable
-
-BNSS Section 193 ప్రకారం Police Report / Final Report
-requirementsను factsకు అనుగుణంగా వివరించండి.
-
-Section 193ను unrelated procedureలకు ఉపయోగించకూడదు.
-
-
-================================================
-13. IO CHECKLIST
-================================================
-
-చివరగా ఈ checklist ఇవ్వండి:
-
-☐ FIR / Information
-☐ Crime Scene Protection
-☐ Scene Inspection
-☐ Photography
-☐ Videography
-☐ Witnesses
-☐ Statements
-☐ Search
-☐ Seizure
-☐ CCTV
-☐ Digital Evidence
-☐ Mobile / Electronic Evidence
-☐ Arrest / Notice
-☐ Recovery
-☐ Medical Evidence
-☐ Forensic Evidence
-☐ FSL
-☐ BSA Electronic Evidence Requirements
-☐ Case Diary
-☐ Final Report / Charge Sheet
-
-
-================================================
-14. IMPORTANT LEGAL CAUTION
-================================================
-
-ప్రతి case analysis చివర అవసరమైనప్పుడు ఈ విధంగా సూచించండి:
-
-"ఈ analysis ప్రాథమిక investigation guidance కోసం మాత్రమే.
-Final section selection, punishment, bail classification,
-procedural compliance మరియు electronic evidence requirementsను
-తాజా BNS, BNSS, BSA statutory text మరియు సంబంధిత official
-notifications / rules ద్వారా IO నిర్ధారించాలి."
-
-అధికారిక చట్టంలో ఉన్నదానికంటే ఎక్కువగా ఊహించి
-legal conclusion ఇవ్వకూడదు.
-
-User facts సరిపోకపోతే ముందుగా:
-
-"ఇంకా ఈ వివరాలు అవసరం"
-
-అని చిన్న list ఇవ్వాలి.
-"""
-
-
-# ============================================================
-# TEXT EXTRACTION FUNCTIONS
-# ============================================================
-
-def extract_pdf_text(file_bytes):
-    """Extract text from PDF."""
     if not PDF_AVAILABLE:
-        return ""
+        return (
+            "PDF reader library (pypdf) is not installed. "
+            "Please add pypdf to requirements.txt."
+        )
 
     try:
-        pdf_reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+        uploaded_file.seek(0)
 
-        pages_text = []
+        reader = PdfReader(uploaded_file)
 
-        for page in pdf_reader.pages:
+        pages = []
+
+        for page in reader.pages:
             try:
-                text = page.extract_text()
+                page_text = page.extract_text()
 
-                if text:
-                    pages_text.append(text)
+                if page_text:
+                    pages.append(page_text)
+
             except Exception:
                 continue
 
-        return "\n\n".join(pages_text)
+        text = "\n".join(pages).strip()
+
+        if text:
+            return text
+
+        return (
+            "PDFలో selectable text కనిపించలేదు. "
+            "ఇది scanned PDF కావచ్చు. PDF pagesను imagesగా OCR చేయాల్సి ఉంటుంది."
+        )
 
     except Exception as e:
-        return f"PDF text extraction error: {e}"
+        return f"PDF చదవడంలో సమస్య: {e}"
 
 
-def extract_image_text(image):
-    """Extract text from image using Tesseract OCR."""
+# =========================================================
+# IMAGE OCR
+# =========================================================
+
+def extract_image_text(uploaded_file):
 
     if not OCR_AVAILABLE:
-        return ""
+        return (
+            "OCR library (pytesseract) అందుబాటులో లేదు. "
+            "requirements.txtలో pytesseract పెట్టండి."
+        )
 
     try:
+        image = Image.open(uploaded_file)
+
         text = pytesseract.image_to_string(
             image,
             lang="eng"
         )
 
-        return text
+        if text.strip():
+            return text.strip()
 
-    except Exception:
-        return ""
+        return (
+            "Image నుంచి text గుర్తించలేకపోయింది. "
+            "Handwriting లేదా Telugu text అయితే OCR accuracy తక్కువగా ఉండవచ్చు."
+        )
 
+    except Exception as e:
+        return f"Image OCRలో సమస్య: {e}"
+
+
+# =========================================================
+# FILE EXTRACTION
+# =========================================================
 
 def extract_uploaded_file(uploaded_file):
-    """Read uploaded file and return text."""
 
     if uploaded_file is None:
         return ""
 
-    file_name = uploaded_file.name.lower()
+    filename = uploaded_file.name.lower()
+
+    if filename.endswith(".txt"):
+        try:
+            uploaded_file.seek(0)
+            return uploaded_file.read().decode(
+                "utf-8",
+                errors="ignore"
+            )
+        except Exception as e:
+            return f"TXT చదవడంలో సమస్య: {e}"
+
+    if filename.endswith(".pdf"):
+        return extract_pdf_text(uploaded_file)
+
+    if filename.endswith(
+        (".jpg", ".jpeg", ".png", ".webp", ".bmp")
+    ):
+        return extract_image_text(uploaded_file)
+
+    return "ఈ file format ప్రస్తుతం support చేయబడలేదు."
+
+
+# =========================================================
+# LEGAL SYSTEM PROMPT
+# =========================================================
+
+SYSTEM_PROMPT = r"""
+You are a careful Indian criminal-law research and investigation assistant
+for police investigation work.
+
+Your job is NOT to blindly assign BNS/BNSS/BSA sections.
+
+=========================================================
+1. MOST IMPORTANT RULE — DATE OF OFFENCE
+=========================================================
+
+First identify the INCIDENT / OFFENCE / OCCURRENCE DATE.
+
+The new criminal-law framework came into force from 01-07-2024:
+
+- Bharatiya Nyaya Sanhita, 2023 (BNS)
+- Bharatiya Nagarik Suraksha Sanhita, 2023 (BNSS)
+- Bharatiya Sakshya Adhiniyam, 2023 (BSA)
+
+For an offence occurring BEFORE 01-07-2024:
+
+Do NOT automatically apply:
+- BNS
+- BNSS
+- BSA
+
+The substantive offence should ordinarily be analysed under the law
+applicable when the offence was committed, subject to repeal/savings
+and any other applicable transitional law.
+
+For old cases/proceedings that were already pending when the new laws
+came into force, carefully consider the relevant repeal-and-savings
+provisions before suggesting procedural/evidentiary provisions.
+
+For an offence occurring ON or AFTER 01-07-2024:
+
+Use:
+- BNS for offences/punishments
+- BNSS for criminal procedure
+- BSA for evidence
+
+=========================================================
+2. NEVER GUESS THE DATE
+=========================================================
+
+If the incident/offence date is not available:
+
+Say clearly:
+
+"Incident/offence date is required to select the applicable criminal-law
+framework."
+
+Do NOT guess BNS or IPC.
+
+Distinguish between:
+
+- date of occurrence
+- date of complaint
+- FIR date
+- investigation date
+- arrest date
+- charge-sheet date
+- trial date
+- date on which proceeding became pending
+
+Do not confuse FIR date with offence date.
+
+=========================================================
+3. OLD-LAW CASES
+=========================================================
+
+For incidents before 01-07-2024, use the historical framework where
+appropriate:
+
+SUBSTANTIVE LAW:
+Indian Penal Code, 1860 (IPC)
+
+PROCEDURE:
+Code of Criminal Procedure, 1973 (CrPC)
+
+EVIDENCE:
+Indian Evidence Act, 1872 (IEA)
+
+Do not convert an old FIR's historical IPC/CrPC/IEA provisions into
+BNS/BNSS/BSA merely because the report is being generated today.
+
+If discussing a historical 2017 theft case, for example, do not say:
+
+"BNS 305 is the offence."
+
+Instead identify the applicable IPC provision and explain that
+the incident predates 01-07-2024.
+
+=========================================================
+4. NEW-LAW CASES
+=========================================================
+
+For incidents on/after 01-07-2024:
+
+Use:
+
+BNS = substantive offences and punishments
+
+BNSS = FIR, investigation, arrest, search, seizure, remand,
+       witness procedure, case diary, final report, etc.
+
+BSA = relevancy/admissibility/proof of evidence, including electronic
+      records where applicable.
+
+=========================================================
+5. SECTION ACCURACY
+=========================================================
+
+NEVER invent section numbers.
+
+Before mentioning a section:
+
+1. Identify the Act.
+2. Identify the exact section.
+3. State what that section actually covers.
+4. Do not assign a section merely because it sounds related.
+
+If uncertain, say:
+
+"Section should be verified from the official text before use."
+
+=========================================================
+6. IMPORTANT PROCEDURAL DISTINCTIONS
+=========================================================
+
+Do NOT confuse:
+
+- FIR registration
+- investigation
+- search
+- search warrant
+- seizure
+- arrest
+- notice to appear
+- production before Magistrate
+- remand
+- case diary
+- final police report
+
+For example, do not automatically describe the general investigation
+section as the search section.
+
+=========================================================
+7. SEARCH
+=========================================================
+
+Distinguish:
+
+A. Search by police officer under statutory police powers.
+
+B. Search pursuant to a warrant / judicial process.
+
+Do not automatically say that every police search requires a Magistrate's
+search warrant.
+
+State the factual and legal basis for the particular search.
+
+=========================================================
+8. WITNESSES
+=========================================================
+
+Do not invent a mandatory number of panch witnesses.
+
+Do not state "exactly 2 witnesses" or "exactly 3 witnesses" unless the
+specific legal provision actually requires that number.
+
+Distinguish:
+
+- complainant
+- eyewitness
+- circumstantial witness
+- seizure/panch witness
+- independent witness
+- police witness
+- expert/forensic witness
+
+=========================================================
+9. DIGITAL / ELECTRONIC EVIDENCE
+=========================================================
+
+Do not automatically apply every electronic-evidence section to every
+mobile phone, SIM, CCTV, screenshot, WhatsApp message, call detail
+record, or photograph.
+
+First identify:
+
+- What is the actual evidence?
+- Is it a physical object?
+- Is it an electronic/digital record?
+- Who produced it?
+- How was it obtained?
+- Is authenticity disputed?
+- What statutory proof/admissibility requirement applies?
+
+Distinguish:
+
+- mobile phone as physical property/evidence
+- SIM card as physical item
+- CDR as electronic record/data
+- CCTV footage as electronic/digital record
+- WhatsApp/chat export as electronic record
+- screenshot as a copy/representation of digital information
+- original device/data source
+- forensic extraction/report
+
+Do NOT automatically say:
+
+"BSA Section 63 certificate is required for every mobile phone."
+
+Analyse the actual evidence and applicable statutory requirements.
+
+Similarly, do not automatically describe BSA Section 64 as a
+"CDR notice section". Explain the actual provision and the actual
+procedure applicable to obtaining the record.
+
+=========================================================
+10. BSA CERTIFICATE
+=========================================================
+
+If an electronic-record certificate is relevant, explain:
+
+- what electronic record is being relied upon
+- what statutory provision applies
+- who is in a position to provide the required certificate/details
+- what device/source information is relevant
+- whether the evidence is primary/original or a reproduced/derived record
+
+Do not automatically say:
+
+"Only a forensic expert can issue the certificate."
+
+Do not automatically say:
+
+"Every screenshot requires a certificate."
+
+The conclusion must depend on the nature and mode of production of
+the electronic record.
+
+=========================================================
+11. ARREST
+=========================================================
+
+Do not recommend arrest merely because an offence is cognizable.
+
+Analyse:
+
+- cognizable/non-cognizable
+- bailable/non-bailable
+- necessity of arrest
+- statutory conditions
+- identification of accused
+- evidence available
+- risk of absconding
+- cooperation with investigation
+- applicable safeguards
+
+If the accused is unknown, do not write as if the accused has already
+been identified.
+
+=========================================================
+12. BAIL
+=========================================================
+
+Clearly distinguish:
+
+- bailable
+- non-bailable
+- anticipatory bail
+- regular bail
+- statutory/default bail where relevant
+
+Do not write "generally bailable" or "generally non-bailable" when the
+official classification can be identified.
+
+=========================================================
+13. PUNISHMENT
+=========================================================
+
+State punishment accurately.
+
+Do not invent:
+
+- minimum imprisonment
+- maximum imprisonment
+- fine
+- classification
+- trial court
+
+If classification is uncertain, say so and recommend verification.
+
+=========================================================
+14. TRIAL COURT
+=========================================================
+
+Do not automatically say "Sessions Court" merely because punishment is
+high.
+
+Check the applicable schedule/classification and state the appropriate
+court.
+
+=========================================================
+15. OLD CASE EXAMPLE
+=========================================================
+
+If the user provides:
+
+Incident date: 28-05-2017
+
+Then the report must NOT say:
+
+"BNS 305 applies because theft in dwelling house."
+
+Instead it must recognize that the occurrence predates 01-07-2024 and
+analyse the offence under the law applicable at that time, subject to
+the applicable savings/transitional provisions.
+
+For a 2017 house-theft case, the model should consider the relevant
+IPC provision rather than automatically substituting BNS 305.
+
+=========================================================
+16. REPORT FORMAT
+=========================================================
+
+Always generate the report in this order:
+
+1. CASE DATE & APPLICABLE LAW
+2. CASE SUMMARY
+3. APPLICABLE OFFENCE(S)
+4. SECTION-WISE LEGAL ANALYSIS
+5. COGNIZABLE / NON-COGNIZABLE
+6. BAILABLE / NON-BAILABLE
+7. PUNISHMENT
+8. TRIAL COURT
+9. FIR / COMPLAINT PROCEDURE
+10. INVESTIGATION STEPS
+11. ARREST ANALYSIS
+12. SEARCH / SEIZURE
+13. WITNESS PROCEDURE
+14. DIGITAL / ELECTRONIC EVIDENCE
+15. FORENSIC REQUIREMENTS
+16. RECOVERY OF PROPERTY
+17. IDENTIFICATION / TEST IDENTIFICATION IF RELEVANT
+18. CASE DIARY / INVESTIGATION RECORD
+19. FINAL REPORT / CHARGE SHEET
+20. INVESTIGATION OFFICER CHECKLIST
+21. LEGAL CAUTIONS / ITEMS TO VERIFY
+
+=========================================================
+17. DATE WARNING
+=========================================================
+
+At the top of every report include:
+
+"Applicable-law determination is based primarily on the stated
+occurrence/offence date and must be checked against the relevant
+repeal-and-savings/transitional provisions and the actual procedural
+history of the case."
+
+If the case is pre-01-07-2024, visibly display:
+
+"⚠️ OLD-LAW CASE:
+IPC / CrPC / Indian Evidence Act framework applies subject to
+repeal-and-savings/transitional provisions."
+
+If the case is on/after 01-07-2024, display:
+
+"✅ NEW-LAW CASE:
+BNS / BNSS / BSA framework applies."
+
+=========================================================
+18. NO FABRICATION
+=========================================================
+
+Never invent:
+
+- FIR number
+- police station
+- officer name
+- accused identity
+- dates
+- witness names
+- section numbers
+- court orders
+- forensic results
+- recoveries
+- case-diary entries
+
+If information is missing, say:
+
+"Not provided."
+
+=========================================================
+19. LEGAL DISCLAIMER
+=========================================================
+
+This is an investigation-support tool and not a substitute for the
+official statute, notification, court order, prosecutor's opinion,
+or legal advice.
+
+For operational use, verify the final section numbers and procedure
+against the official current statute and applicable case-specific
+orders/notifications.
+"""
+
+
+# =========================================================
+# BUILD USER PROMPT
+# =========================================================
+
+def build_user_prompt(case_text, law_info, old_pending):
+
+    incident_date_text = "Not identified"
+
+    incident_date = extract_incident_date(case_text)
+
+    if incident_date:
+        incident_date_text = incident_date.strftime("%d-%m-%Y")
+
+    pending_text = "Yes" if old_pending else "No / not stated"
+
+    return f"""
+Analyse the following police case carefully.
+
+IMPORTANT DATE INFORMATION
+--------------------------
+Incident / offence date detected:
+{incident_date_text}
+
+01-07-2024 transition date:
+01-07-2024
+
+Old proceeding pending before 01-07-2024:
+{pending_text}
+
+Selected primary framework:
+{law_info["framework"]}
+
+Reason:
+{law_info["reason"]}
+
+CASE MATERIAL
+-------------
+{case_text}
+
+MANDATORY INSTRUCTIONS
+----------------------
+
+1. First state the incident/offence date.
+2. State which legal framework applies.
+3. Explain why that framework applies.
+4. Do not substitute BNS/BNSS/BSA for a pre-01-07-2024 occurrence.
+5. If this is an old pending proceeding, separately explain the
+   repeal-and-savings issue.
+6. Do not guess sections.
+7. Do not fabricate facts.
+8. If an exact section needs verification, clearly mark it as
+   "VERIFY".
+9. Distinguish physical evidence from electronic evidence.
+10. Do not automatically require a BSA electronic-record certificate
+    for every digital item.
+11. Give practical investigation steps.
+12. Give a final IO checklist.
+13. Mention all assumptions separately.
+"""
+
+
+# =========================================================
+# CALL GROQ
+# =========================================================
+
+def investigate_case(case_text, law_info, old_pending):
+
+    user_prompt = build_user_prompt(
+        case_text,
+        law_info,
+        old_pending
+    )
 
     try:
 
-        # TXT
-        if file_name.endswith(".txt"):
-
-            data = uploaded_file.read()
-
-            try:
-                return data.decode("utf-8")
-
-            except UnicodeDecodeError:
-                return data.decode("utf-8", errors="ignore")
-
-
-        # PDF
-        elif file_name.endswith(".pdf"):
-
-            data = uploaded_file.read()
-
-            return extract_pdf_text(data)
-
-
-        # Image
-        elif file_name.endswith(
-            (".jpg", ".jpeg", ".png")
-        ):
-
-            image = Image.open(uploaded_file)
-
-            return extract_image_text(image)
-
-
-        else:
-            return ""
-
-    except Exception as e:
-        return f"File reading error: {e}"
-
-
-# ============================================================
-# GROQ LEGAL ANALYSIS
-# ============================================================
-
-def investigate_case(police_query):
-
-    try:
-
-        chat_completion = client.chat.completions.create(
-
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
             messages=[
                 {
                     "role": "system",
@@ -594,251 +819,249 @@ def investigate_case(police_query):
                 },
                 {
                     "role": "user",
-                    "content": police_query
+                    "content": user_prompt
                 }
             ],
-
-            model="openai/gpt-oss-120b",
-
-            temperature=0.2,
-
-            max_tokens=5000
+            temperature=0.1,
+            max_tokens=12000
         )
 
-        return chat_completion.choices[0].message.content
+        return response.choices[0].message.content
 
     except Exception as e:
 
-        error_message = str(e)
-
-        if "429" in error_message:
-
-            return (
-                "⚠️ Groq API rate limit వచ్చింది.\n\n"
-                "కొంత సమయం తర్వాత మళ్లీ ప్రయత్నించండి."
-            )
-
-        if "401" in error_message:
-
-            return (
-                "⚠️ Groq API Key సమస్య ఉంది.\n\n"
-                "Streamlit Secretsలో GROQ_API_KEY సరిగ్గా ఉందో "
-                "పరిశీలించండి."
-            )
-
-        if "400" in error_message:
-
-            return (
-                "⚠️ Groq request error వచ్చింది.\n\n"
-                f"Technical details: {error_message}"
-            )
-
         return (
-            "⚠️ Legal analysis సమయంలో లోపం వచ్చింది.\n\n"
-            f"Technical details: {error_message}"
+            "AI legal analysisలో error వచ్చింది.\n\n"
+            f"Error: {e}"
         )
 
 
-# ============================================================
-# INPUT SECTION
-# ============================================================
+# =========================================================
+# CASE DETAILS
+# =========================================================
 
 st.subheader("📝 కేసు వివరాలు")
 
-
-police_query = st.text_area(
-    "కేసు / ఫిర్యాదు వివరాలను ఇక్కడ నమోదు చేయండి",
-    height=220,
+case_text = st.text_area(
+    "కేసు వివరాలు / FIR / Complaint వివరాలు ఇక్కడ paste చేయండి",
+    height=300,
     placeholder=(
         "ఉదాహరణ:\n"
-        "ఒక వ్యక్తి ఇంట్లోకి అక్రమంగా ప్రవేశించి "
-        "కర్రతో కొట్టాడు. తర్వాత మొబైల్ ఫోన్ తీసుకెళ్లాడు..."
+        "Incident Date: 28-05-2017\n"
+        "FIR Date: 29-05-2017\n"
+        "Unknown persons entered the house..."
     )
 )
 
 
-# ============================================================
-# FILE UPLOAD
-# ============================================================
+# =========================================================
+# OLD PENDING CASE OPTION
+# =========================================================
 
-st.subheader("📁 ఫిర్యాదు / డాక్యుమెంట్ / ఫోటో")
+st.subheader("⚖️ Applicable Law Selection")
+
+st.info(
+    "Incident date 01-07-2024 కంటే ముందు ఉంటే old-law framework "
+    "(IPC / CrPC / IEA)ను ప్రధానంగా ఉపయోగిస్తుంది."
+)
+
+old_pending = st.checkbox(
+    "01-07-2024కి ముందు ఈ కేసు / proceeding ఇప్పటికే pendingలో ఉందా?"
+)
+
+
+# =========================================================
+# FILE UPLOAD
+# =========================================================
+
+st.subheader("📎 FIR / Complaint / Document Upload")
 
 uploaded_file = st.file_uploader(
-    "PDF, TXT, JPG, JPEG లేదా PNG ఫైల్‌ను upload చేయండి",
+    "PDF / TXT / Image upload చేయండి",
     type=[
         "pdf",
         "txt",
         "jpg",
         "jpeg",
-        "png"
+        "png",
+        "webp",
+        "bmp"
     ]
 )
 
 
-# ============================================================
-# SHOW UPLOADED FILE
-# ============================================================
+# =========================================================
+# EXTRACT FILE
+# =========================================================
 
-extracted_text = ""
+uploaded_text = ""
 
 if uploaded_file is not None:
 
-    st.success(
-        f"ఫైల్ upload అయింది: {uploaded_file.name}"
-    )
+    with st.spinner("Document చదువుతోంది..."):
+        uploaded_text = extract_uploaded_file(uploaded_file)
 
-    file_name = uploaded_file.name.lower()
+    if uploaded_text:
 
-    if file_name.endswith(
-        (".jpg", ".jpeg", ".png")
-    ):
-
-        try:
-
-            image = Image.open(uploaded_file)
-
-            st.image(
-                image,
-                caption="Uploaded Image",
-                use_container_width=True
-            )
-
-            extracted_text = extract_image_text(image)
-
-        except Exception as e:
-
-            st.warning(
-                f"Image reading సమస్య: {e}"
-            )
-
-    else:
-
-        extracted_text = extract_uploaded_file(
-            uploaded_file
-        )
-
-    if extracted_text:
+        st.success("Document text తీసుకుంది.")
 
         with st.expander("📄 Extracted Text చూడండి"):
-
             st.text_area(
-                "Extracted text",
-                extracted_text,
-                height=200
+                "Extracted Text",
+                uploaded_text,
+                height=250
             )
 
-    elif file_name.endswith(".pdf"):
+
+# =========================================================
+# COMBINE INPUT
+# =========================================================
+
+combined_text = case_text.strip()
+
+if uploaded_text.strip():
+
+    if combined_text:
+        combined_text += "\n\n"
+        combined_text += "----- UPLOADED DOCUMENT -----\n\n"
+
+    combined_text += uploaded_text.strip()
+
+
+# =========================================================
+# DETECT DATE
+# =========================================================
+
+incident_date = extract_incident_date(combined_text)
+
+
+if incident_date:
+
+    law_info = select_law(
+        incident_date,
+        old_pending
+    )
+
+    if law_info["status"] == "OLD_PENDING":
 
         st.warning(
-            "PDF నుంచి text extract కాలేదు. "
-            "ఇది scanned PDF అయితే OCR అవసరం కావచ్చు."
+            "⚠️ OLD PENDING CASE\n\n"
+            "Primary framework: IPC / CrPC / Indian Evidence Act\n\n"
+            "01-07-2024కి ముందు pending proceeding కావడంతో "
+            "repeal-and-savings provisions కూడా పరిగణించాలి."
         )
 
-    elif file_name.endswith(
-        (".jpg", ".jpeg", ".png")
-    ):
+    elif law_info["status"] == "OLD":
 
-        if not OCR_AVAILABLE:
+        st.warning(
+            f"⚠️ OLD-LAW CASE\n\n"
+            f"Incident Date: {incident_date.strftime('%d-%m-%Y')}\n\n"
+            "Applicable primary framework:\n"
+            "IPC / CrPC / Indian Evidence Act"
+        )
 
-            st.warning(
-                "OCR library అందుబాటులో లేదు."
-            )
+    elif law_info["status"] == "NEW":
+
+        st.success(
+            f"✅ NEW-LAW CASE\n\n"
+            f"Incident Date: {incident_date.strftime('%d-%m-%Y')}\n\n"
+            "Applicable primary framework:\n"
+            "BNS / BNSS / BSA"
+        )
+
+else:
+
+    law_info = {
+        "status": "UNKNOWN",
+        "framework": "DATE_REQUIRED",
+        "reason": "Incident/offence date not detected."
+    }
+
+    st.warning(
+        "⚠️ Incident / offence date గుర్తించబడలేదు. "
+        "Analysis చేయడానికి ముందు date verify చేయండి."
+    )
 
 
-# ============================================================
-# ANALYSIS BUTTON
-# ============================================================
+# =========================================================
+# ANALYZE BUTTON
+# =========================================================
 
-st.divider()
-
-analyze_button = st.button(
+if st.button(
     "⚖️ Legal Analysis ప్రారంభించండి",
     type="primary",
     use_container_width=True
-)
+):
 
+    if not combined_text.strip():
 
-# ============================================================
-# ANALYSIS
-# ============================================================
-
-if analyze_button:
-
-    final_query_parts = []
-
-    if police_query.strip():
-
-        final_query_parts.append(
-            "USER PROVIDED CASE DETAILS:\n"
-            + police_query.strip()
+        st.error(
+            "ముందుగా case details లేదా document upload చేయండి."
         )
 
-    if extracted_text.strip():
+    elif incident_date is None:
 
-        final_query_parts.append(
-            "UPLOADED DOCUMENT / IMAGE TEXT:\n"
-            + extracted_text.strip()
-        )
-
-    if not final_query_parts:
-
-        st.warning(
-            "⚠️ ముందుగా కేసు వివరాలు లేదా "
-            "డాక్యుమెంట్ / ఫోటో upload చేయండి."
+        st.error(
+            "❌ Incident / offence date కనిపించలేదు.\n\n"
+            "ఉదాహరణగా ఇలా ఇవ్వండి:\n"
+            "Incident Date: 28-05-2017"
         )
 
     else:
 
-        final_query = """
+        st.subheader("🔎 Applicable Law")
 
-క్రింది కేసు వివరాలను పూర్తిగా విశ్లేషించండి.
+        if law_info["status"] == "OLD_PENDING":
 
-ప్రతి section numberను facts ఆధారంగా జాగ్రత్తగా select చేయండి.
+            st.warning(
+                "IPC / CrPC / Indian Evidence Act\n"
+                "Old pending proceeding – savings/transitional provisions apply."
+            )
 
-తప్పు section numberను ఊహించి ఇవ్వకండి.
+        elif law_info["status"] == "OLD":
 
-తెలుగులో స్పష్టంగా, Police Investigation Officerకు
-ప్రయోజనకరంగా సమాధానం ఇవ్వండి.
+            st.warning(
+                "IPC / CrPC / Indian Evidence Act"
+            )
 
-CASE INFORMATION:
+        else:
 
-""" + "\n\n".join(final_query_parts)
+            st.success(
+                "BNS / BNSS / BSA"
+            )
 
+        st.write(
+            f"**Incident Date:** "
+            f"{incident_date.strftime('%d-%m-%Y')}"
+        )
+
+        st.write(
+            f"**Reason:** {law_info['reason']}"
+        )
 
         with st.spinner(
-            "⚖️ కేసును BNS / BNSS / BSA ప్రకారం విశ్లేషిస్తున్నాను..."
+            "Legal analysis తయారు చేస్తోంది... "
         ):
 
             result = investigate_case(
-                final_query
+                combined_text,
+                law_info,
+                old_pending
             )
 
-
-        st.divider()
-
-        st.subheader(
-            "📋 Legal Analysis Result"
-        )
+        st.subheader("📋 Legal Analysis Result")
 
         st.markdown(result)
 
-        st.divider()
 
-        st.info(
-            "⚠️ ఇది ప్రాథమిక investigation guidance మాత్రమే. "
-            "Final legal actionకు ముందు తాజా BNS, BNSS, BSA "
-            "statutory text మరియు అధికారిక notifications / rules "
-            "ద్వారా verify చేయండి."
-        )
-
-
-# ============================================================
+# =========================================================
 # FOOTER
-# ============================================================
+# =========================================================
 
 st.divider()
 
 st.caption(
-    "⚖️ Police Legal & Investigation Assistant | "
-    "BNS • BNSS • BSA"
+    "⚠️ This tool is for investigation-support and legal research only. "
+    "Final legal action should be verified against the official statute, "
+    "notifications, court orders and case-specific facts."
 )
