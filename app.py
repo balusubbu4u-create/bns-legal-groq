@@ -84,9 +84,9 @@ st.sidebar.write("• BSA – Bharatiya Sakshya Adhiniyam")
 st.sidebar.markdown("---")
 
 st.sidebar.info(
-    "⚠️ AI ఇచ్చే legal analysis ను "
-    "అధికారిక చట్ట గ్రంథం / అధికారిక నోటిఫికేషన్‌తో "
-    "తప్పనిసరిగా verify చేయండి."
+    "⚠️ AI ఇచ్చే legal analysis ను అధికారిక చట్ట గ్రంథం, "
+    "ప్రభుత్వ నోటిఫికేషన్లు మరియు competent authority ద్వారా "
+    "verify చేయాలి."
 )
 
 
@@ -112,74 +112,39 @@ Legal & Investigation Assistant.
 6. Indian Evidence Act, 1872 (IEA)
 
 
-==============================
-VERY IMPORTANT ACCURACY RULES
-==============================
+IMPORTANT ACCURACY RULES:
 
-• Section number ఊహించి చెప్పకూడదు.
+• Section numbers ఊహించి చెప్పకూడదు.
 
-• Facts ఆధారంగా offence elements ను గుర్తించాలి.
+• Facts ఆధారంగా offence elements గుర్తించాలి.
 
-• BNS section ను IPC section తో compare చేసేటప్పుడు
-  exact correspondence లేకపోతే
+• BNS మరియు IPC comparison లో exact equivalent లేకపోతే
   "Exact equivalent కాదు" అని చెప్పాలి.
 
-• ఒక offence పేరు చూసి section number guess చేయకూడదు.
-
-• Punishment, Cognizable / Non-Cognizable,
-  Bailable / Non-Bailable వంటి విషయాలు చెప్పేటప్పుడు
-  applicability ని జాగ్రత్తగా పరిశీలించాలి.
-
-• BNSS procedure sections ను
-  BNS offence sections తో కలపకూడదు.
-
-• BSA evidence sections ను
-  BNS offence sections తో కలపకూడదు.
+• Facts స్పష్టంగా లేకపోతే assumptions చేయకండి.
 
 • Section ఖచ్చితంగా తెలియకపోతే
-  తప్పు section చెప్పడం కంటే
-  verification అవసరం అని చెప్పాలి.
+  తప్పు section చెప్పడం కంటే verification అవసరం అని చెప్పాలి.
+
+• BNSS procedure sections ను BNS offence sections తో కలపకూడదు.
+
+• BSA evidence sections ను BNS offence sections తో కలపకూడదు.
+
+• Punishment, Cognizable / Non-Cognizable,
+  Bailable / Non-Bailable వివరాలు చెప్పేటప్పుడు
+  facts మరియు applicable law ను జాగ్రత్తగా పరిశీలించాలి.
 
 
-==============================
-ELECTRONIC EVIDENCE
-==============================
-
-Electronic evidence విషయంలో:
-
-• CCTV
-• Mobile Phone
-• Computer
-• DVR / NVR
-• Call Records
-• WhatsApp Chats
-• Emails
-• Digital Photographs
-• Audio / Video Recordings
-• GPS / Location Data
-
-వంటి evidence గురించి చెప్పేటప్పుడు
-BSA provisions మరియు applicable certificate
-requirements ను facts ఆధారంగా వివరించాలి.
-
-
-==============================
-LANGUAGE
-==============================
+LANGUAGE:
 
 User Telugu లో అడిగితే Telugu లో సమాధానం ఇవ్వాలి.
 
-Legal Section names English లో ఉంచవచ్చు.
+Legal section names English లో ఉంచవచ్చు.
 
-అవసరమైన చోట English + Telugu explanation ఇవ్వాలి.
-
-Technical legal terminology కి
-simple Telugu meaning ఇవ్వాలి.
+Technical legal terminology కి simple Telugu explanation ఇవ్వాలి.
 
 
-==============================
-DISCLAIMER
-==============================
+DISCLAIMER:
 
 ఇది legal research / investigation assistance కోసం మాత్రమే.
 
@@ -209,12 +174,9 @@ def extract_pdf_text(file_bytes):
             page_text = page.extract_text()
 
             if page_text:
-
                 text += page_text + "\n"
 
-
         return text.strip()
-
 
     except Exception:
 
@@ -240,12 +202,12 @@ def extract_text_file(file_bytes):
 
 
 # =========================================================
-# PDF TO IMAGES
+# PDF TO IMAGE
 # =========================================================
 
 def pdf_to_images(
     file_bytes,
-    max_pages=20
+    max_pages=10
 ):
 
     try:
@@ -262,43 +224,34 @@ def pdf_to_images(
             max_pages
         )
 
-
         for page_number in range(total_pages):
 
             page = pdf_document.load_page(
                 page_number
             )
 
-
-            # High resolution for OCR
-
+            # OCR కోసం మంచి resolution
             matrix = fitz.Matrix(
-                2,
-                2
+                1.5,
+                1.5
             )
-
 
             pix = page.get_pixmap(
                 matrix=matrix,
                 alpha=False
             )
 
-
             image_bytes = pix.tobytes(
                 "png"
             )
-
 
             images.append(
                 image_bytes
             )
 
-
         pdf_document.close()
 
-
         return images
-
 
     except Exception as e:
 
@@ -310,7 +263,8 @@ def pdf_to_images(
 
 
 # =========================================================
-# OCR - IMAGE TO TEXT
+# IMAGE OCR
+# IMPORTANT: LOW OUTPUT TOKENS
 # =========================================================
 
 def extract_text_from_image(
@@ -324,80 +278,59 @@ def extract_text_from_image(
             image_bytes
         ).decode("utf-8")
 
-
         response = client.chat.completions.create(
 
             model=selected_model,
 
-
             messages=[
-
 
                 {
                     "role": "system",
 
                     "content": """
+You are an OCR assistant.
 
-You are a high accuracy OCR assistant.
+Your ONLY task is to extract visible text.
 
-Your ONLY job is to read and extract
-all visible text from the image.
+Rules:
 
-IMPORTANT RULES:
-
-1. Telugu handwritten text must be read carefully.
-
-2. Preserve original words as much as possible.
-
-3. Do NOT summarize.
-
-4. Do NOT perform legal analysis.
-
-5. Do NOT guess missing text.
-
-6. If a word is unclear write:
-
-[UNCLEAR]
-
-7. Preserve paragraphs and line structure.
-
-8. Return ONLY extracted text.
-
-9. Do not add explanations.
-
+1. Read Telugu handwriting carefully.
+2. Extract text only.
+3. Do not explain.
+4. Do not summarize.
+5. Do not perform legal analysis.
+6. Do not guess missing words.
+7. If text is unclear, write [UNCLEAR].
+8. Preserve paragraph structure.
+9. Return only OCR text.
 """
                 },
-
 
                 {
                     "role": "user",
 
                     "content": [
 
-
                         {
                             "type": "text",
 
                             "text": """
+Read this uploaded document carefully.
 
-Read this uploaded image carefully.
+It may contain Telugu handwritten text.
 
-It may contain Telugu handwritten complaint,
-case facts or official documents.
+Extract ONLY visible text.
 
-Extract all visible text.
+Do not summarize.
+Do not explain.
+Do not perform legal analysis.
+Do not identify legal sections.
 
-Do NOT summarize.
+If the text is unclear write [UNCLEAR].
 
-Do NOT analyze.
-
-Do NOT identify legal sections.
-
-Return ONLY the OCR text.
-
+Return only the extracted text.
 """
                         },
-
 
                         {
                             "type": "image_url",
@@ -417,21 +350,18 @@ Return ONLY the OCR text.
 
             ],
 
-
             temperature=0,
 
-
-            max_tokens=6000
+            # Groq OTPM limit కోసం తగ్గించాం
+            max_tokens=800
 
         )
 
-
         return response.choices[0].message.content
-
 
     except Exception as e:
 
-        return f"OCR Error: {str(e)}"
+        return f"❌ OCR Error: {str(e)}"
 
 
 # =========================================================
@@ -448,48 +378,32 @@ def analyze_text(
 
             model=selected_model,
 
-
             messages=[
-
 
                 {
                     "role": "system",
-
-                    "content":
-                    LEGAL_SYSTEM_PROMPT
+                    "content": LEGAL_SYSTEM_PROMPT
                 },
-
 
                 {
                     "role": "user",
-
-                    "content":
-                    user_prompt
+                    "content": user_prompt
                 }
 
             ],
 
-
             temperature=0.1,
 
-
-            max_tokens=6000
+            # Groq free/on-demand limit కోసం
+            max_tokens=950
 
         )
 
-
         return response.choices[0].message.content
-
 
     except Exception as e:
 
-        return f"""
-
-❌ AI Analysis Error
-
-{str(e)}
-
-"""
+        return f"❌ AI Analysis Error:\n\n{str(e)}"
 
 
 # =========================================================
@@ -497,15 +411,10 @@ def analyze_text(
 # =========================================================
 
 tab1, tab2 = st.tabs(
-
     [
-
         "📝 Text Details",
-
         "📷 Photo / Document"
-
     ]
-
 )
 
 
@@ -515,11 +424,9 @@ tab1, tab2 = st.tabs(
 
 with tab1:
 
-
     st.subheader(
         "📝 కేసు వివరాలు నమోదు చేయండి"
     )
-
 
     case_text = st.text_area(
 
@@ -527,31 +434,22 @@ with tab1:
 
         height=350,
 
-
         placeholder=(
-
             "సంఘటన తేదీ...\n"
             "సంఘటన జరిగిన ప్రదేశం...\n"
             "ఎవరెవరు పాల్గొన్నారు...\n"
             "ఏం జరిగింది...\n"
             "గాయాలు / నష్టం...\n"
             "CCTV / Mobile / ఇతర evidence..."
-
         )
 
     )
 
-
     if st.button(
-
         "⚖️ Legal Analysis",
-
         type="primary",
-
         key="text_analysis"
-
     ):
-
 
         if not case_text.strip():
 
@@ -559,18 +457,15 @@ with tab1:
                 "⚠️ ముందుగా కేసు వివరాలు నమోదు చేయండి."
             )
 
-
         else:
-
 
             with st.spinner(
                 "🔎 Legal analysis జరుగుతోంది..."
             ):
 
-
                 prompt = f"""
 
-క్రింది కేసు వివరాలను పూర్తిగా
+క్రింది కేసు వివరాలను
 BNS, BNSS మరియు BSA ప్రకారం విశ్లేషించండి.
 
 CASE DETAILS:
@@ -602,15 +497,11 @@ CASE DETAILS:
 
 ## 11. BSA Evidence
 
-## 12. Digital Evidence
+## 12. Investigation Steps
 
-## 13. Investigation Steps
+## 13. IO Checklist
 
-## 14. IO Checklist
-
-## 15. Documents / Witnesses Required
-
-## 16. Final Legal Observations
+## 14. Final Legal Observations
 
 
 IMPORTANT:
@@ -620,29 +511,21 @@ Section numbers guess చేయకండి.
 Facts సరిపోకపోతే
 additional facts required అని చెప్పండి.
 
-IPC equivalent exact కాకపోతే
-Exact equivalent కాదు అని చెప్పండి.
-
 """
-
 
                 result = analyze_text(
                     prompt
                 )
 
-
             st.markdown("---")
-
 
             st.subheader(
                 "📋 Legal Analysis Result"
             )
 
-
             st.markdown(
                 result
             )
-
 
             st.download_button(
 
@@ -665,48 +548,30 @@ Exact equivalent కాదు అని చెప్పండి.
 
 with tab2:
 
-
     st.subheader(
         "📷 Complaint / Document Upload"
     )
-
 
     uploaded_file = st.file_uploader(
 
         "PDF / TXT / JPG / JPEG / PNG / WEBP upload చేయండి",
 
-
         type=[
-
             "pdf",
-
             "txt",
-
             "jpg",
-
             "jpeg",
-
             "png",
-
             "webp"
-
         ]
 
     )
 
-
-    # =====================================================
-    # FILE UPLOAD
-    # =====================================================
-
     if uploaded_file is not None:
 
-
-        file_bytes = uploaded_file.read()
-
+        file_bytes = uploaded_file.getvalue()
 
         file_name = uploaded_file.name.lower()
-
 
         st.success(
             f"✅ File uploaded: {uploaded_file.name}"
@@ -718,85 +583,51 @@ with tab2:
         # =================================================
 
         if file_name.endswith(
-
             (
-
                 ".jpg",
-
                 ".jpeg",
-
                 ".png",
-
                 ".webp"
-
             )
-
         ):
 
-
             st.image(
-
                 file_bytes,
-
                 caption="Uploaded Image",
-
                 use_container_width=True
-
             )
 
-
-            # ---------------------------------------------
-
-            # IMAGE OCR
-
-            # ---------------------------------------------
-
             if st.button(
-
                 "🔎 Read Image / OCR",
-
                 type="primary",
-
                 key="image_ocr"
-
             ):
-
 
                 with st.spinner(
                     "📷 Image నుండి Telugu text చదువుతున్నాను..."
                 ):
 
-
                     mime_type = uploaded_file.type
 
-
                     ocr_text = extract_text_from_image(
-
                         file_bytes,
-
                         mime_type
-
                     )
 
-
-                st.session_state[
-                    "image_ocr_result"
-                ] = ocr_text
+                    st.session_state[
+                        "image_ocr_result"
+                    ] = ocr_text
 
 
             # ---------------------------------------------
-
-            # SHOW OCR TEXT
-
+            # OCR TEXT DISPLAY
             # ---------------------------------------------
 
             if "image_ocr_result" in st.session_state:
 
-
                 st.subheader(
                     "📝 Extracted OCR Text"
                 )
-
 
                 edited_text = st.text_area(
 
@@ -812,17 +643,10 @@ with tab2:
 
                 )
 
-
                 st.session_state[
                     "image_ocr_result"
                 ] = edited_text
 
-
-                # -----------------------------------------
-
-                # LEGAL ANALYSIS
-
-                # -----------------------------------------
 
                 if st.button(
 
@@ -834,40 +658,30 @@ with tab2:
 
                 ):
 
-
                     with st.spinner(
                         "⚖️ Legal analysis జరుగుతోంది..."
                     ):
 
-
                         prompt = f"""
 
-క్రింది OCR ద్వారా తీసుకున్న
-complaint/document text ను
+క్రింది OCR ద్వారా తీసుకున్న complaint/document text ను
+BNS, BNSS మరియు BSA ప్రకారం విశ్లేషించండి.
 
-BNS, BNSS మరియు BSA ప్రకారం
-legal investigation perspective నుండి
-విశ్లేషించండి.
+OCR TEXT:
+
+{st.session_state["image_ocr_result"]}
 
 
 IMPORTANT:
 
 OCR వల్ల spelling mistakes ఉండవచ్చు.
 
-అస్పష్టమైన facts ఆధారంగా
-section numbers guess చేయకండి.
+Facts స్పష్టంగా లేకపోతే assumptions చేయకండి.
 
-Facts స్పష్టంగా లేకపోతే
-additional facts required అని చెప్పండి.
-
-
-CASE TEXT:
-
-{st.session_state["image_ocr_result"]}
+Section numbers guess చేయకండి.
 
 
 ఈ headings ఉపయోగించండి:
-
 
 ## 1. సంఘటన సారాంశం
 
@@ -891,36 +705,27 @@ CASE TEXT:
 
 ## 11. BSA Evidence
 
-## 12. Digital Evidence
+## 12. Investigation Steps
 
-## 13. Investigation Steps
+## 13. IO Checklist
 
-## 14. IO Checklist
-
-## 15. Documents / Witnesses
-
-## 16. Final Legal Observations
+## 14. Final Legal Observations
 
 """
-
 
                         result = analyze_text(
                             prompt
                         )
 
-
                     st.markdown("---")
-
 
                     st.subheader(
                         "📋 Legal Analysis Result"
                     )
 
-
                     st.markdown(
                         result
                     )
-
 
                     st.download_button(
 
@@ -943,14 +748,10 @@ CASE TEXT:
 
         elif file_name.endswith(".pdf"):
 
-
             st.info(
-
-                "📄 PDF లో text ఉంటే direct గా చదువుతుంది. "
-                "Scanned PDF అయితే OCR ద్వారా చదువుతుంది."
-
+                "📄 Text PDF అయితే direct గా చదువుతుంది. "
+                "Scanned PDF అయితే OCR ఉపయోగిస్తుంది."
             )
-
 
             if st.button(
 
@@ -962,81 +763,73 @@ CASE TEXT:
 
             ):
 
-
                 with st.spinner(
                     "📄 PDF చదువుతున్నాను..."
                 ):
-
 
                     pdf_text = extract_pdf_text(
                         file_bytes
                     )
 
 
-                # -----------------------------------------
-
+                # =========================================
                 # NORMAL TEXT PDF
-
-                # -----------------------------------------
+                # =========================================
 
                 if pdf_text and len(pdf_text) > 30:
-
 
                     st.success(
                         "✅ PDF లో readable text కనుగొనబడింది."
                     )
-
 
                     st.session_state[
                         "pdf_ocr_result"
                     ] = pdf_text
 
 
-                # -----------------------------------------
-
+                # =========================================
                 # SCANNED PDF
-
-                # -----------------------------------------
+                # =========================================
 
                 else:
 
-
                     st.info(
-                        "📷 ఇది scanned/image PDF లాగా ఉంది. "
+                        "📷 Scanned PDF గుర్తించబడింది. "
                         "OCR చేస్తున్నాను..."
                     )
 
-
                     pdf_images = pdf_to_images(
-                        file_bytes
+                        file_bytes,
+                        max_pages=10
                     )
 
-
                     if not pdf_images:
-
 
                         st.error(
                             "❌ PDF pages ను images గా మార్చలేకపోయాము."
                         )
 
-
                     else:
-
 
                         all_text = ""
 
+                        progress_bar = st.progress(0)
 
                         for i, image_bytes in enumerate(
                             pdf_images
                         ):
 
+                            progress_value = int(
+                                ((i + 1) / len(pdf_images)) * 100
+                            )
+
+                            progress_bar.progress(
+                                progress_value
+                            )
 
                             with st.spinner(
-
                                 f"📷 Page {i + 1} OCR జరుగుతోంది..."
-
                             ):
-
 
                                 page_text = extract_text_from_image(
 
@@ -1046,11 +839,9 @@ CASE TEXT:
 
                                 )
 
-
                             all_text += (
                                 f"\n\n===== PAGE {i + 1} =====\n\n"
                             )
-
 
                             all_text += page_text
 
@@ -1059,20 +850,18 @@ CASE TEXT:
                             "pdf_ocr_result"
                         ] = all_text
 
+                        progress_bar.empty()
+
 
             # ---------------------------------------------
-
             # SHOW PDF TEXT
-
             # ---------------------------------------------
 
             if "pdf_ocr_result" in st.session_state:
 
-
                 st.subheader(
                     "📝 PDF Extracted Text"
                 )
-
 
                 edited_pdf_text = st.text_area(
 
@@ -1088,17 +877,10 @@ CASE TEXT:
 
                 )
 
-
                 st.session_state[
                     "pdf_ocr_result"
                 ] = edited_pdf_text
 
-
-                # -----------------------------------------
-
-                # ANALYZE PDF TEXT
-
-                # -----------------------------------------
 
                 if st.button(
 
@@ -1110,20 +892,15 @@ CASE TEXT:
 
                 ):
 
-
                     with st.spinner(
                         "⚖️ Legal analysis జరుగుతోంది..."
                     ):
 
-
                         prompt = f"""
 
 క్రింది PDF complaint/document text ను
-
 BNS, BNSS మరియు BSA ప్రకారం
-legal investigation perspective నుండి
-విశ్లేషించండి.
-
+legal investigation perspective నుండి విశ్లేషించండి.
 
 DOCUMENT TEXT:
 
@@ -1134,8 +911,7 @@ IMPORTANT:
 
 OCR వల్ల spelling mistakes ఉండవచ్చు.
 
-Facts స్పష్టంగా లేకపోతే
-assumptions చేయకండి.
+Facts స్పష్టంగా లేకపోతే assumptions చేయకండి.
 
 Section numbers guess చేయకండి.
 
@@ -1144,7 +920,6 @@ Exact IPC equivalent లేకపోతే
 
 
 ఈ headings ఉపయోగించండి:
-
 
 ## 1. Complaint Summary
 
@@ -1168,36 +943,27 @@ Exact IPC equivalent లేకపోతే
 
 ## 11. BSA Evidence
 
-## 12. Digital Evidence
+## 12. Investigation Steps
 
-## 13. Investigation Steps
+## 13. IO Checklist
 
-## 14. IO Checklist
-
-## 15. Documents / Witnesses
-
-## 16. Final Legal Observations
+## 14. Final Legal Observations
 
 """
-
 
                         result = analyze_text(
                             prompt
                         )
 
-
                     st.markdown("---")
-
 
                     st.subheader(
                         "📋 PDF Legal Analysis"
                     )
 
-
                     st.markdown(
                         result
                     )
-
 
                     st.download_button(
 
@@ -1220,11 +986,9 @@ Exact IPC equivalent లేకపోతే
 
         elif file_name.endswith(".txt"):
 
-
             text_content = extract_text_file(
                 file_bytes
             )
-
 
             edited_txt = st.text_area(
 
@@ -1232,10 +996,11 @@ Exact IPC equivalent లేకపోతే
 
                 value=text_content,
 
-                height=400
+                height=400,
+
+                key="txt_editor"
 
             )
-
 
             if st.button(
 
@@ -1247,19 +1012,14 @@ Exact IPC equivalent లేకపోతే
 
             ):
 
-
                 with st.spinner(
                     "⚖️ Analysis జరుగుతోంది..."
                 ):
 
-
                     prompt = f"""
 
 క్రింది complaint/case text ను
-
-BNS, BNSS మరియు BSA perspective నుండి
-విశ్లేషించండి.
-
+BNS, BNSS మరియు BSA ప్రకారం విశ్లేషించండి.
 
 CASE TEXT:
 
@@ -1267,7 +1027,6 @@ CASE TEXT:
 
 
 ఈ headings ఉపయోగించండి:
-
 
 ## 1. Summary
 
@@ -1291,37 +1050,30 @@ CASE TEXT:
 
 ## 11. BSA Evidence
 
-## 12. Digital Evidence
+## 12. Investigation Steps
 
-## 13. Investigation Steps
+## 13. IO Checklist
 
-## 14. IO Checklist
-
-## 15. Final Observations
+## 14. Final Observations
 
 
 Section numbers guess చేయకండి.
 
 """
 
-
                     result = analyze_text(
                         prompt
                     )
 
-
                 st.markdown("---")
-
 
                 st.subheader(
                     "📋 TXT Legal Analysis"
                 )
 
-
                 st.markdown(
                     result
                 )
-
 
                 st.download_button(
 
@@ -1344,13 +1096,11 @@ Section numbers guess చేయకండి.
 
 st.markdown("---")
 
-
 st.caption(
     "⚖️ BNS, BNSS & BSA Legal & Investigation Assistant"
 )
 
-
 st.caption(
-    "AI-generated analysis should be verified with the "
-    "applicable official legislation and legal authorities."
+    "AI-generated analysis should be verified with official "
+    "legislation and competent legal authorities."
 )
