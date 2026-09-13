@@ -1043,7 +1043,7 @@ if uploaded_text.strip():
     if combined_text:
         combined_text += (
             "\n\n"
-            ----- UPLOADED DOCUMENT -----
+            "----- UPLOADED DOCUMENT -----"
             "\n\n"
         )
     combined_text += (
