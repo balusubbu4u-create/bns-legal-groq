@@ -7,12 +7,6 @@ import base64
 import fitz
 from io import BytesIO
 
-# =========================================================
-
-# PAGE SETTINGS
-
-# =========================================================
-
 st.set_page_config(
 page_title="BNS FIR Legal Assistant",
 page_icon="⚖️",
@@ -31,20 +25,15 @@ st.warning(
 "complaint facts మరియు evidence ఆధారంగా verification చేయాలి."
 )
 
-# =========================================================
+# ==============================
 
 # GROQ API
 
-# =========================================================
+# ==============================
 
 try:
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
-
-```
-client = Groq(
-    api_key=GROQ_API_KEY
-)
-```
+client = Groq(api_key=GROQ_API_KEY)
 
 except Exception:
 st.error(
@@ -53,21 +42,15 @@ st.error(
 )
 st.stop()
 
-# =========================================================
-
-# MODELS
-
-# =========================================================
-
 TEXT_MODEL = "openai/gpt-oss-120b"
 
 VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
-# =========================================================
+# ==============================
 
-# LEGAL SYSTEM PROMPT
+# SYSTEM PROMPT
 
-# =========================================================
+# ==============================
 
 SYSTEM_PROMPT = """
 You are a highly cautious Indian criminal-law FIR analysis assistant.
@@ -165,28 +148,24 @@ C. Allegations which are presently insufficient
 Do NOT guess.
 """
 
-# =========================================================
+# ==============================
 
 # PDF TEXT EXTRACTION
 
-# =========================================================
+# ==============================
 
 def extract_pdf_text(file):
-
-```
 text = ""
 
+```
 try:
     file.seek(0)
 
     pdf_bytes = file.getvalue()
 
-    reader = PdfReader(
-        BytesIO(pdf_bytes)
-    )
+    reader = PdfReader(BytesIO(pdf_bytes))
 
     for page in reader.pages:
-
         page_text = page.extract_text()
 
         if page_text:
@@ -195,7 +174,6 @@ try:
     return text.strip()
 
 except Exception as e:
-
     st.warning(
         f"PDF direct text extraction చేయలేకపోయింది: {e}"
     )
@@ -203,17 +181,16 @@ except Exception as e:
     return ""
 ```
 
-# =========================================================
+# ==============================
 
-# DOCX TEXT EXTRACTION
+# DOCX EXTRACTION
 
-# =========================================================
+# ==============================
 
 def extract_docx(file):
 
 ```
 try:
-
     file.seek(0)
 
     document = Document(file)
@@ -223,9 +200,7 @@ try:
     for paragraph in document.paragraphs:
 
         if paragraph.text.strip():
-            paragraphs.append(
-                paragraph.text
-            )
+            paragraphs.append(paragraph.text)
 
     return "\n".join(paragraphs)
 
@@ -234,20 +209,18 @@ except Exception as e:
     return f"DOCX extraction error: {e}"
 ```
 
-# =========================================================
+# ==============================
 
-# IMAGE → BASE64
+# IMAGE TO BASE64
 
-# =========================================================
+# ==============================
 
 def image_to_base64(uploaded_file):
 
 ```
 uploaded_file.seek(0)
 
-image = Image.open(
-    uploaded_file
-)
+image = Image.open(uploaded_file)
 
 if image.mode != "RGB":
     image = image.convert("RGB")
@@ -265,11 +238,11 @@ return base64.b64encode(
 ).decode("utf-8")
 ```
 
-# =========================================================
+# ==============================
 
-# IMAGE OCR USING GROQ VISION
+# IMAGE OCR
 
-# =========================================================
+# ==============================
 
 def extract_image_text(uploaded_file):
 
@@ -285,7 +258,6 @@ try:
         model=VISION_MODEL,
 
         messages=[
-
             {
                 "role": "user",
 
@@ -321,10 +293,8 @@ IMPORTANT:
                             f"data:image/jpeg;base64,{image_base64}"
                         }
                     }
-
                 ]
             }
-
         ],
 
         temperature=0,
@@ -341,11 +311,11 @@ IMPORTANT:
     return f"Image OCR error: {e}"
   ```
 
-# =========================================================
+# ==============================
 
-# SCANNED PDF → IMAGE → GROQ VISION OCR
+# SCANNED PDF OCR
 
-# =========================================================
+# ==============================
 
 def extract_scanned_pdf_text(uploaded_file):
 
@@ -398,7 +368,6 @@ try:
             model=VISION_MODEL,
 
             messages=[
-
                 {
                     "role": "user",
 
@@ -441,10 +410,8 @@ IMPORTANT:
                                 f"data:image/jpeg;base64,{image_base64}"
                             }
                         }
-
                     ]
                 }
-
             ],
 
             temperature=0,
@@ -452,16 +419,10 @@ IMPORTANT:
             max_tokens=6000
         )
 
-        page_text = (
-            response
-            .choices[0]
-            .message
-            .content
-        )
+        page_text = response.choices[0].message.content
 
         all_text += (
-            f"\n\n"
-            f"========================\n"
+            f"\n\n========================\n"
             f"PAGE {page_number + 1}\n"
             f"========================\n\n"
             f"{page_text}"
@@ -491,11 +452,11 @@ IMPORTANT:
         pdf_document.close()
   ```
 
-# =========================================================
+# ==============================
 
 # TABS
 
-# =========================================================
+# ==============================
 
 tab1, tab2 = st.tabs(
 [
@@ -506,11 +467,11 @@ tab1, tab2 = st.tabs(
 
 complaint_text = ""
 
-# =========================================================
+# ==============================
 
-# TAB 1
+# TEXT TAB
 
-# =========================================================
+# ==============================
 
 with tab1:
 
@@ -520,8 +481,11 @@ st.subheader(
 )
 
 text_input = st.text_area(
+
     "Complaint details ఇక్కడ paste చేయండి",
+
     height=350,
+
     placeholder=
     "ఫిర్యాదు / రిపోర్టు వివరాలను ఇక్కడ paste చేయండి..."
 )
@@ -531,11 +495,11 @@ if text_input.strip():
     complaint_text = text_input.strip()
 ```
 
-# =========================================================
+# ==============================
 
-# TAB 2
+# UPLOAD TAB
 
-# =========================================================
+# ==============================
 
 with tab2:
 
@@ -573,9 +537,9 @@ if uploaded_file is not None:
     file_name = uploaded_file.name.lower()
 
 
-    # =================================================
+    # ==============================
     # TXT
-    # =================================================
+    # ==============================
 
     if file_name.endswith(".txt"):
 
@@ -605,9 +569,9 @@ if uploaded_file is not None:
             )
 
 
-    # =================================================
+    # ==============================
     # PDF
-    # =================================================
+    # ==============================
 
     elif file_name.endswith(".pdf"):
 
@@ -615,16 +579,14 @@ if uploaded_file is not None:
             "📄 PDFలో digital text పరిశీలిస్తున్నాను..."
         ):
 
-            complaint_text = (
-                extract_pdf_text(
-                    uploaded_file
-                )
+            complaint_text = extract_pdf_text(
+                uploaded_file
             )
+
 
         if (
             complaint_text
-            and
-            len(complaint_text.strip()) > 20
+            and len(complaint_text.strip()) > 20
         ):
 
             st.success(
@@ -654,10 +616,10 @@ if uploaded_file is not None:
                     )
                 )
 
+
             if (
                 complaint_text
-                and
-                not complaint_text.startswith(
+                and not complaint_text.startswith(
                     "Scanned PDF OCR error:"
                 )
             ):
@@ -683,9 +645,9 @@ if uploaded_file is not None:
                 )
 
 
-    # =================================================
+    # ==============================
     # DOCX
-    # =================================================
+    # ==============================
 
     elif file_name.endswith(".docx"):
 
@@ -700,9 +662,9 @@ if uploaded_file is not None:
         )
 
 
-    # =================================================
+    # ==============================
     # IMAGE
-    # =================================================
+    # ==============================
 
     elif file_name.endswith(
         (".jpg", ".jpeg", ".png")
@@ -724,10 +686,10 @@ if uploaded_file is not None:
                 uploaded_file
             )
 
+
         if (
             complaint_text
-            and
-            not complaint_text.startswith(
+            and not complaint_text.startswith(
                 "Image OCR error:"
             )
         ):
@@ -753,11 +715,11 @@ if uploaded_file is not None:
             )
 ```
 
-# =========================================================
+# ==============================
 
-# ANALYZE BUTTON
+# ANALYSIS BUTTON
 
-# =========================================================
+# ==============================
 
 st.markdown("---")
 
@@ -767,11 +729,11 @@ type="primary",
 use_container_width=True
 )
 
-# =========================================================
+# ==============================
 
 # LEGAL ANALYSIS
 
-# =========================================================
+# ==============================
 
 if analyze_button:
 
@@ -794,7 +756,8 @@ elif (
 ):
 
     st.error(
-        "❌ OCRలో error ఉన్నందున Legal Analysis చేయలేము."
+        "❌ OCRలో error ఉన్నందున "
+        "Legal Analysis చేయలేము."
     )
 
 else:
@@ -840,6 +803,7 @@ Teluguలో detailed preliminary FIR analysis ఇవ్వండి.
                         "role": "system",
                         "content": SYSTEM_PROMPT
                     },
+
                     {
                         "role": "user",
                         "content": user_prompt
@@ -865,10 +829,16 @@ Teluguలో detailed preliminary FIR analysis ఇవ్వండి.
             st.markdown(result)
 
             st.download_button(
+
                 "📥 Download Analysis",
+
                 data=result,
-                file_name="FIR_Legal_Analysis.txt",
+
+                file_name=
+                "FIR_Legal_Analysis.txt",
+
                 mime="text/plain",
+
                 use_container_width=True
             )
 
@@ -879,11 +849,11 @@ Teluguలో detailed preliminary FIR analysis ఇవ్వండి.
             )
 ```
 
-# =========================================================
+# ==============================
 
 # FOOTER
 
-# =========================================================
+# ==============================
 
 st.markdown("---")
 
@@ -892,10 +862,3 @@ st.caption(
 "Final FIR registration and applicable sections must be "
 "verified with the current statutory text and case facts."
 )
-
-````
-
-**ముఖ్యంగా:** పై codeలో మొదటి line నుంచే `import streamlit as st` ఉంది. ` ```python ` లేదా చివర ` ``` ` **ఏదీ `app.py`లో పెట్టకండి**.
-
-అలాగే `requirements.txt`లో **`PyMuPDF` తప్పనిసరిగా add చేయండి**. లేకపోతే `import fitz` దగ్గర error వస్తుంది.
-````
