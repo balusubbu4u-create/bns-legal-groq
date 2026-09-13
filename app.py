@@ -27,7 +27,7 @@ st.warning(
 )
 
 # =========================================================
-# 2. GROQ CLIENT CONFIGURATION & SAFE FALLBACKS
+# 2. GROQ CLIENT CONFIGURATION
 # =========================================================
 if "GROQ_API_KEY" not in st.secrets:
     st.error("GROQ_API_KEY కనిపించలేదు. Streamlit Cloud -> Settings -> Secrets లో GROQ_API_KEY నమోదు చేయండి.")
@@ -35,8 +35,6 @@ if "GROQ_API_KEY" not in st.secrets:
 
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-TEXT_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
-VISION_MODELS = ["llama-3.2-11b-vision-preview", "llama-3.2-90b-vision-preview"]
 AUDIO_MODEL = "whisper-large-v3"
 
 # =========================================================
@@ -78,8 +76,74 @@ Analyze the given complaint thoroughly and provide a structured, professional re
 5. **ఫైనల్ చార్జిషీట్ దాఖలు:** Section 193 BNSS (పాత 173 CrPC) కింద కోర్టులో చార్జిషీట్ దాఖలు చేసే పూర్తి ప్రక్రియ."""
 
 # =========================================================
-# 4. HELPER FUNCTIONS FOR FILE & MEDIA PROCESSING
+# 4. ROBUST AUTOMATIC MODEL FALLBACK FUNCTIONS
 # =========================================================
+
+def call_groq_text_with_fallback(prompt_text):
+    """Groq API లో పనిచేసే మోడల్స్ కోసం ఆటోమేటిక్ ట్రయల్ (Fallback loop)."""
+    # Groq లో ప్రస్తుతం అందుబాటులో ఉండే ప్రధాన మోడల్స్ లిస్ట్
+    candidate_models = [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "llama3-70b-8192",
+        "llama3-8b-8192",
+        "mixtral-8x7b-32768",
+        "gemma2-9b-it"
+    ]
+    
+    last_error = None
+    for model in candidate_models:
+        try:
+            res = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": LEGAL_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt_text}
+                ],
+                temperature=0.1
+            )
+            return res.choices[0].message.content, model
+        except Exception as e:
+            last_error = e
+            continue
+            
+    raise Exception(f"అన్ని మోడల్స్ విఫలమయ్యాయి. చివరి లోపం: {str(last_error)}")
+
+def call_groq_vision_with_fallback(images, extra_text=""):
+    """విజన్ మోడల్స్ కోసం ఆటోమేటిక్ ట్రయల్ (Fallback loop)."""
+    candidate_vision_models = [
+        "llama-3.2-11b-vision-preview",
+        "llama-3.2-90b-vision-preview"
+    ]
+    
+    user_content = [{"type": "text", "text": f"Analyze this scanned complaint document thoroughly.\n{extra_text}"}]
+    for img in images:
+        buffered = BytesIO()
+        img.convert("RGB").save(buffered, format="JPEG", quality=80)
+        b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        user_content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
+        })
+
+    last_error = None
+    for model in candidate_vision_models:
+        try:
+            res = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": LEGAL_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_content}
+                ],
+                temperature=0.1
+            )
+            return res.choices[0].message.content, model
+        except Exception as e:
+            last_error = e
+            continue
+            
+    # ఒకవేళ విజన్ మోడల్స్ ఫెయిల్ అయితే టెక్స్ట్ మోడల్‌కు మళ్లిస్తుంది
+    return call_groq_text_with_fallback(f"Scanned document analysis requested. Extra notes: {extra_text}")
 
 def transcribe_audio_file(file_bytes, filename):
     try:
@@ -118,57 +182,8 @@ def process_pdf(file):
         return False, images
     return True, text
 
-def image_to_base64(pil_img):
-    buffered = BytesIO()
-    pil_img.convert("RGB").save(buffered, format="JPEG", quality=80)
-    return base64.b64encode(buffered.getvalue()).decode("utf-8")
-
-def call_groq_text_completion(prompt_text):
-    last_error = None
-    for model_name in TEXT_MODELS:
-        try:
-            res = client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": LEGAL_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt_text}
-                ],
-                temperature=0.1
-            )
-            return res.choices[0].message.content, model_name
-        except Exception as e:
-            last_error = e
-            continue
-    raise last_error
-
-def call_groq_vision_completion(images, extra_text=""):
-    user_content = [{"type": "text", "text": f"Analyze this scanned complaint document thoroughly.\n{extra_text}"}]
-    for img in images:
-        b64 = image_to_base64(img)
-        user_content.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
-        })
-
-    last_error = None
-    for model_name in VISION_MODELS:
-        try:
-            res = client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": LEGAL_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_content}
-                ],
-                temperature=0.1
-            )
-            return res.choices[0].message.content, model_name
-        except Exception as e:
-            last_error = e
-            continue
-    raise last_error
-
 # =========================================================
-# 5. USER INTERFACE (TABS FOR DIFFERENT INPUTS)
+# 5. USER INTERFACE (TABS)
 # =========================================================
 
 tab1, tab2, tab3 = st.tabs([
@@ -180,7 +195,6 @@ tab1, tab2, tab3 = st.tabs([
 complaint_text_payload = ""
 images_payload = []
 
-# --- TAB 1: DOCUMENTS & SCREENSHOTS ---
 with tab1:
     uploaded_doc = st.file_uploader(
         "ఫిర్యాదు ఫైల్‌ను అప్‌లోడ్ చేయండి (PDF, DOCX, TXT, లేదా JPG/PNG ఫోటో/స్క్రీన్‌షాట్):",
@@ -193,7 +207,7 @@ with tab1:
             img = Image.open(uploaded_doc)
             img.thumbnail((1100, 1100))
             images_payload.append(img)
-            st.image(img, caption="అప్‌లోడ్ చేసిన ఇమేజ్", use_container_width=True)
+            st.image(img, caption="అప్‌లోడ్ చేసిన ఇమేజ్ / స్క్రీన్‌షాట్", use_container_width=True)
         elif ext == "docx":
             complaint_text_payload += extract_from_docx(uploaded_doc)
             st.success("Word డాక్యుమెంట్ నుండి వివరాలు లోడ్ అయ్యాయి.")
@@ -209,7 +223,6 @@ with tab1:
                 images_payload = result
                 st.info(f"📷 స్కాన్ చేసిన PDF గుర్తించబడింది ({len(result)} పేజీలు ఇమేజ్ మోడ్‌లోకి మార్చబడ్డాయి).")
 
-# --- TAB 2: VOICE RECORDING & AUDIO/VIDEO ---
 with tab2:
     st.subheader("మైక్రోఫోన్ ద్వారా మాట్లాడండి లేదా ఆడియో/వీడియో ఫైల్ అప్‌లోడ్ చేయండి")
     
@@ -235,12 +248,11 @@ with tab2:
             st.success("ఆడియో/వీడియో ఫైల్ నుండి తీసిన వివరాలు:")
             st.write(media_transcription)
 
-# --- TAB 3: DIRECT TEXT ---
 with tab3:
     manual_text = st.text_area(
         "ఫిర్యాదు వివరాలను ఇక్కడ నేరుగా టైప్ చేయండి లేదా అదనపు సమాచారాన్ని జోడించండి:",
         height=180,
-        placeholder="ఉదాహరణ: బాధితురాలి పేరు..., నిందితుడు చేసిన చర్యలు..., తేదీ మరియు సమయం..."
+        placeholder="ఉదాహరణ: ఇంట్లోకి అక్రమంగా ప్రవేశించి కర్రతో తలపై కొట్టగా రక్తం అయినట్లు ఫిర్యాదు..."
     )
     if manual_text.strip():
         complaint_text_payload += "\n" + manual_text.strip()
@@ -261,13 +273,13 @@ if analyze_btn:
                 used_model = ""
 
                 if images_payload:
-                    report, used_model = call_groq_vision_completion(images_payload, complaint_text_payload)
+                    report, used_model = call_groq_vision_with_fallback(images_payload, complaint_text_payload)
                 else:
-                    report, used_model = call_groq_text_completion(complaint_text_payload)
+                    report, used_model = call_groq_text_with_fallback(complaint_text_payload)
 
                 st.subheader("📋 సమగ్ర BNS / BNSS / BSA లీగల్ & ఇన్వెస్టిగేషన్ నివేదిక")
                 st.markdown(report)
-                st.caption(f"విశ్లేషణ కోసం ఉపయోగించిన Groq AI మోడల్: `{used_model}`")
+                st.caption(f"విశ్లేషణ కోసం విజయవంతంగా ఉపయోగించిన Groq AI మోడల్: `{used_model}`")
 
                 st.download_button(
                     label="📥 నివేదికను డౌన్‌లోడ్ చేయండి (Download Report as Text)",
@@ -278,4 +290,4 @@ if analyze_btn:
 
             except Exception as e:
                 st.error(f"విశ్లేషణ సమయంలో లోపం ఏర్పడింది: {str(e)}")
-                st.info("సలహా: Groq API కీ సరైనదో కాదో చెక్ చేయండి. సర్వర్ రద్దీగా ఉంటే కొద్దిసేపటి తర్వాత మళ్ళీ ప్రయత్నించండి.")
+                st.info("సలహా: మీ Groq API కీ సరైనదో లేదో డాష్‌బోర్డ్‌లో చెక్ చేయండి.")
