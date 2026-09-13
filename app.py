@@ -8,13 +8,24 @@ st.set_page_config(page_title="Police Legal & Investigation Assistant", layout="
 st.title("⚖️ పోలీస్ లీగల్ & ఇన్వెస్టిగేషన్ అసిస్టెంట్ (BNS, BNSS, BSA)")
 st.write("నూతన క్రిమినల్ చట్టాల ప్రకారం దర్యాప్తు అధికారుల (IO) కోసం మార్గదర్శకాలు.")
 
-# 2. API Key సెటప్ (సైడ్‌బార్‌లో)
+# 2. సైడ్‌బార్‌లో API Key మరియు మోడల్ ఎంపిక
 api_key_input = st.sidebar.text_input("Groq API Key ఇవ్వండి:", type="password")
 
 if api_key_input:
     GROQ_API_KEY = api_key_input
 else:
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+
+# మోడల్ సెలెక్ట్ చేసుకునే డ్రాప్డౌన్ (ఎర్రర్ వస్తే వేరే మోడల్ మార్చుకోవడానికి)
+selected_model = st.sidebar.selectbox(
+    "Groq Model ని ఎంచుకోండి:",
+    [
+        "llama3-8b-8192",
+        "llama3-70b-8192",
+        "llama-3.1-8b-instant",
+        "llama-3.3-70b-versatile"
+    ]
+)
 
 # 3. పోలీసుల విచారణ ప్రక్రియకు తగిన స్ట్రక్చర్డ్ సిస్టమ్ ప్రాంప్ట్
 SYSTEM_PROMPT = """
@@ -53,14 +64,14 @@ SYSTEM_PROMPT = """
    - చార్జిషీట్‌తో జతపరచవలసిన ప్రాథమిక డాక్యుమెంట్ల జాబితా (మహజర్, సీఎఫ్ఎస్ఎల్ రిపోర్ట్, BSA సర్టిఫికేట్, మెడికల్ రిపోర్ట్ మొదలైనవి).
 """
 
-def investigate_case(police_query: str, client_obj):
+def investigate_case(police_query: str, client_obj, model_name: str):
     try:
         chat_completion = client_obj.chat.completions.create(
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": police_query}
             ],
-            model="llama-3.1-8b-instant",  # <--- మోడల్ పేరు అప్‌డేట్ చేయబడింది
+            model=model_name,
             temperature=0.2,
             max_tokens=2500
         )
@@ -91,9 +102,9 @@ if st.button("మార్గదర్శకాలు రూపొందిం�
     elif not user_query.strip():
         st.error("దయచేసి కేసు వివరాలు ఇవ్వండి లేదా డాక్యుమెంట్‌ను అప్‌లోడ్ చేయండి.")
     else:
-        with st.spinner("విచారణ అధికారికి మార్గదర్శకాలు తయారు చేయబడుతున్నాయి..."):
+        with st.spinner(f"విచారణ అధికారికి మార్గదర్శకాలు తయారు చేయబడుతున్నాయి ({selected_model})..."):
             client = Groq(api_key=GROQ_API_KEY)
-            report = investigate_case(user_query, client)
+            report = investigate_case(user_query, client, selected_model)
             st.success("నివేదిక విజయవంతంగా తయారైంది!")
             st.markdown("---")
             st.markdown(report)
