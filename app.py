@@ -14,62 +14,53 @@ from openai import OpenAI
 from io import BytesIO
 from PIL import Image
 import PyPDF2
+import easyocr
 
 # App UI Header
 st.title("⚖️ BNS / BNSS / BSA Legal & Investigation Engine")
-st.caption("భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక (Powered by Groq)")
+st.caption("భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక (Powered by OpenAI GPT)")
 
-# Fetch Groq API Key securely
+# Fetch OpenAI API Key securely from Streamlit secrets or Environment
 api_key = None
 try:
-    if "GROQ_API_KEY" in st.secrets:
-        api_key = st.secrets["GROQ_API_KEY"]
-    elif "groq_api_key" in st.secrets:
-        api_key = st.secrets["groq_api_key"]
-    elif "OPENROUTER_API_KEY" in st.secrets:
-        api_key = st.secrets["OPENROUTER_API_KEY"]
+    if "OPENAI_API_KEY" in st.secrets:
+        api_key = st.secrets["OPENAI_API_KEY"]
+    elif "openai_api_key" in st.secrets:
+        api_key = st.secrets["openai_api_key"]
 except Exception:
     pass
 
 if not api_key:
-    api_key = os.environ.get("GROQ_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY")
 
 if api_key:
     api_key = str(api_key).strip().strip('"').strip("'")
-
-base_url = "https://api.groq.com/openai/v1"
 
 # Sidebar: Configuration
 st.sidebar.header("⚙️ సిస్టమ్ కాన్ఫిగరేషన్")
 
 if not api_key:
-    st.sidebar.warning("⚠️ Groq API కీ లభించలేదు.")
-    api_key = st.sidebar.text_input("Groq API Key (gsk_...) ని ఇక్కడ నమోదు చేయండి:", type="password")
+    st.sidebar.warning("⚠️ OpenAI API కీ లభించలేదు.")
+    api_key = st.sidebar.text_input("OpenAI API Key (sk-...) ని ఇక్కడ నమోదు చేయండి:", type="password")
     if api_key:
         api_key = str(api_key).strip().strip('"').strip("'")
 
-available_models = ["openai/gpt-oss-20b", "openai/gpt-oss-120b"]
-if api_key:
-    try:
-        temp_client = OpenAI(api_key=api_key, base_url=base_url)
-        models_data = temp_client.models.list()
-        fetched_models = [
-            m.id for m in models_data.data 
-            if not any(x in m.id.lower() for x in ["whisper", "audio", "guard", "orpheus"])
-        ]
-        if fetched_models:
-            available_models = fetched_models
-    except Exception:
-        pass
+available_models = ["gpt-4o", "gpt-4o-mini"]
 
 selected_model = st.sidebar.selectbox(
-    "Groq మోడల్‌ను ఎంచుకోండి:",
+    "OpenAI మోడల్‌ను ఎంచుకోండి:",
     options=available_models,
     index=0
 )
 
-# Helper function to extract text from uploaded files
+# Cache EasyOCR Reader for Telugu and English to prevent repeated memory allocation
+@st.cache_resource
+def load_ocr_reader():
+    return easyocr.Reader(['te', 'en'], gpu=False)
+
+# File text extraction handling PDF, Text, and Images via OCR
 def extract_text_from_file(uploaded_file):
+    uploaded_file.seek(0)
     file_extension = uploaded_file.name.split('.')[-1].lower()
     extracted_text = ""
     try:
@@ -80,8 +71,10 @@ def extract_text_from_file(uploaded_file):
                 if t:
                     extracted_text += t + "\n"
         elif file_extension in ['jpg', 'jpeg', 'png']:
-            img = Image.open(uploaded_file)
-            extracted_text = f"[Attached Image File: {uploaded_file.name} of size {img.size}]\n"
+            image_bytes = uploaded_file.read()
+            reader = load_ocr_reader()
+            results = reader.readtext(image_bytes, detail=0)
+            extracted_text = "\n".join(results)
         elif file_extension in ['txt', 'doc', 'docx']:
             extracted_text = uploaded_file.read().decode('utf-8', errors='ignore')
     except Exception as e:
@@ -130,135 +123,72 @@ def repair_and_parse_json(text):
         
     raise ValueError("Unable to parse JSON after repairs")
 
-# Default structured Telugu fallback
-def generate_fallback_report(complaint_text):
-    return {
-        "complaint_category": "సైబర్ మోసం మరియు ఆర్థిక నేరం",
-        "key_facts": [
-            "బాధితుడు ఫిర్యాదులో పేర్కొన్న చిరునామాలో నివసిస్తున్నారు.",
-            "10 సెప్టెంబర్ 2026న గూగుల్ ప్లే స్టోర్ నుండి 'ఈజీ లోన్స్ అండ్ రివార్డ్స్' యాప్‌ను డౌన్‌లోడ్ చేసుకున్నారు.",
-            "అదే రోజు మధ్యాహ్నం సుమారు 2:30 గంటలకు గుర్తుతెలియని వ్యక్తి (+91 91234 XXXXX) నుంచి ఫోన్ చేసి యాప్ ప్రతినిధిగా పరిచయం చేసుకున్నారు.",
-            "కేవైసీ వెరిఫికేషన్ పేరుతో పంపిన లింక్‌లో వివరాలు నమోదు చేయగానే, బాధితుడి అనుమతి లేకుండానే బ్యాంక్ ఖాతా నుండి ₹45,000 డెబిట్ అయ్యాయి.",
-            "డబ్బులు కట్ అయిన వెంటనే కాల్ కట్ చేసి యాప్ పనిచేయడం ఆగిపోయింది; బాధితుడు వెంటనే ఖాతాను తాత్కాలికంగా నిలిపివేశారు."
-        ],
-        "applicable_sections": [
-            {
-                "act": "BNS, 2023",
-                "section": "Section 318(4)",
-                "offence_name": "మోసపూరితంగా ప్రేరేపించి ఆస్తిని బదిలీ చేయించుకోవడం (Cheating)",
-                "punishment": "7 సంవత్సరాల వరకు జైలు శిక్ష మరియు జరిమానా",
-                "classification": "కాగ్నిజబుల్ (Cognizable), నాన్-బెయిలబుల్ (Non-Bailable)",
-                "justification": "మోసపూరిత ఉద్దేశంతో తప్పుడు వివరాలు చెప్పి బాధితుడి ఖాతా నుండి నిధులను అక్రమంగా బదిలీ చేయించుకున్నందున వర్తిస్తుంది."
-            },
-            {
-                "act": "Information Technology Act, 2000",
-                "section": "Section 66D",
-                "offence_name": "కంప్యూటర్ వనరును ఉపయోగించి వ్యక్త్యానుకరణ ద్వారా మోసం (Cheating by personation)",
-                "punishment": "3 సంవత్సరాల వరకు జైలు శిక్ష మరియు ₹1 లక్ష వరకు జరిమానా",
-                "classification": "కాగ్నిజబుల్ (Cognizable), బెయిలబుల్ (Bailable)",
-                "justification": "మొబైల్ ఫోన్, ఫిషింగ్ లింక్ మరియు ఇంటర్నెట్ వనరులను ఉపయోగించి నకిలీ ప్రతినిధిగా నమ్మించి మోసగించినందుకు వర్తిస్తుంది."
-            }
-        ],
-        "bnss_procedure": {
-            "fir_or_pe_rule": "Section 173(3) BNSS: 7 సంవత్సరాల లోపు శిక్ష గల నేరాలకు DSP అనుమతితో 14 రోజుల ప్రాథమిక విచారణకు అవకాశమున్నప్పటికీ, సైబర్ నేరాల్లో నిధులు త్వరగా రికవరీ చేయడానికి వెంటనే రెగ్యులర్ FIR నమోదు చేయాలి.",
-            "notice_or_arrest": "Section 35(3) BNSS: 7 సంవత్సరాల కంటే తక్కువ శిక్ష ఉండే నేరాలకు నిందితునికి ముందుగా హాజరు నోటీసు (Notice of Appearance) జారీ చేయడం చట్టబద్ధమైన నిబంధన.",
-            "detention_default_bail_timeline": "Section 187(3) BNSS: 10 సంవత్సరాల లోపు శిక్ష గల నేరాల్లో దర్యాప్తు ముగించి చార్జిషీట్ దాఖలుకు గరిష్ట కస్టడీ గడువు 60 రోజులు. గడువు దాటితే నిందితునికి డిఫాల్ట్ బెయిల్ పొందే హక్కు ఉంటుంది.",
-            "victim_update_rule": "Section 193(3)(ii) BNSS: కేసు నమోదు అయిన నాటి నుండి ప్రతి 90 రోజులకు ఒకసారి దర్యాప్తు పురోగతి వివరాలను ఫిర్యాదుదారునికి/బాధితునికి తప్పనిసరిగా లిఖితపూర్వకంగా లేదా డిజిటల్ మార్గంలో తెలియజేయాలి."
-        },
-        "bsa_evidence_rules": {
-            "electronic_evidence_cert": "Section 63(4) BSA: బ్యాంక్ స్టేట్‌మెంట్లు, మోసపూరిత లింక్ లాగ్స్, కాల్ రికార్డులు మరియు స్క్రీన్‌షాట్‌లను రుజువు చేయడానికి సర్వర్ అడ్మినిస్ట్రేటర్ లేదా సంబంధిత నోడల్ అధికారి సంతకం చేసిన ఎలక్ట్రానిక్ సర్టిఫికెట్ తప్పనిసరి.",
-            "videography_rule": "Section 105 BNSS: మోసానికి వాడిన మొబైల్ ఫోన్లు లేదా ఇతర డిజిటల్ పరికరాలను పంచనామా ద్వారా స్వాధీనం చేసుకునేటప్పుడు తప్పనిసరిగా ఆడియో-వీడియో రికార్డింగ్ చేయాలి.",
-            "forensic_visit_rule": "Section 176(3) BNSS: 7 సంవత్సరాలు లేదా అంతకంటే ఎక్కువ శిక్ష ఉన్న తీవ్ర నేరాల్లో ఫోరెన్సిక్ నిపుణుల సందర్శన తప్పనిసరి."
-        },
-        "io_action_checklist": [
-            "Section 94 BNSS: సంబంధిత బ్యాంకులు మరియు పేమెంట్ గేట్‌వేలకు తక్షణమే నోటీసు జారీ చేసి, నిందితుడి బెనిఫిషియరీ ఖాతాను Section 107 BNSS కింద స్తంభింపజేయాలి (Freeze).",
-            "Section 94 BNSS: టెలికాం సర్వీస్ ప్రొవైడర్లకు నోటీసు ఇచ్చి నేరానికి ఉపయోగించిన మొబైల్ నంబర్ (+91 91234 XXXXX) యొక్క CDR, IPDR, టవర్ లొకేషన్ మరియు SDR సేకరించాలి.",
-            "Section 94 BNSS: మోసపూరిత యాప్ మరియు హోస్టింగ్ సేవల సమాచారం కోసం గూగుల్/యాప్ ప్రొవైడర్‌కు నోటీసు పంపి లాగ్స్, ఐపీ చిరునామాలను కోరాలి.",
-            "Section 105 BNSS: బాధితుడి మొబైల్‌లోని లావాదేవీల స్క్రీన్‌షాట్లు, మెసేజ్‌లు మరియు ఇతర డిజిటల్ సాక్ష్యాలను స్వాధీనం చేసుకునే సమయంలో ఆడియో-వీడియో రికార్డింగ్ నిర్వహించాలి.",
-            "Section 63(4) BSA: సేకరించిన బ్యాంక్ రికార్డులు, కాల్ డేటా, ఎలక్ట్రానిక్ లావాదేవీలకు సంబంధిత అధికారుల నుండి చట్టబద్ధమైన ధ్రువీకరణ పత్రం (Certificate) పొందాలి.",
-            "Section 35(3) BNSS: నిందితుల గుర్తింపు లభించగానే విచారణకు హాజరుకావాలని Section 35(3) BNSS కింద చట్టపరమైన నోటీసు జారీ చేయాలి.",
-            "Section 193(3)(ii) BNSS: కేసు నమోదు అయినప్పటి నుండి 90 రోజులలోపు దర్యాప్తు పురోగతి నివేదికను బాధితునికి అధికారికంగా అందించాలి."
-        ]
-    }
-
-# System Prompt forcing formal Telugu output
+# Universal Dynamic System Prompt covering all legal provisions
 SYSTEM_PROMPT = """
-Role: You are an authoritative Indian Criminal Law Decision-Engine specialized in Bharatiya Nyaya Sanhita (BNS, 2023), Bharatiya Nagarik Suraksha Sanhita (BNSS, 2023), Bharatiya Sakshya Adhiniyam (BSA, 2023), and Special Acts (IT Act, 2000).
+Role: You are an authoritative Indian Criminal Law Decision-Engine specialized in Bharatiya Nyaya Sanhita (BNS, 2023), Bharatiya Nagarik Suraksha Sanhita (BNSS, 2023), Bharatiya Sakshya Adhiniyam (BSA, 2023), and Special Acts (Prevention of Corruption Act, IT Act, etc.).
 
-CRITICAL LANGUAGE REQUIREMENT:
-You MUST generate all descriptive content, facts, justifications, procedures, and checklists STRICTLY IN PROFESSIONAL TELUGU (తెలుగు భాషలో మాత్రమే సమాధానం ఇవ్వాలి). 
-Keep Act names and Section numbers clear (e.g., 'BNS, 2023', 'Section 318(4)', 'Section 94 BNSS', 'Section 63(4) BSA'), but explain all facts, procedures, and steps in Telugu.
+CRITICAL INSTRUCTIONS FOR UNIVERSAL SECTION MAPPING:
+1. THOROUGH COMPLAINT & OCR ANALYSIS:
+   - Read the extracted text from the complaint/documents carefully without bias.
+   - Accurately extract all offences described in the complaint (e.g., Cheating, Criminal Breach of Trust, Extortion, Physical Hurt/Assault, Criminal Intimidation, Forgery, Public Servant Misconduct, Cyber Fraud, etc.).
+   - Dynamically identify and apply ALL legally applicable sections. Do NOT restrict to any single section.
+   - If the accused is a Public Servant (e.g., Police Official), examine relevant provisions for public servant misconduct and criminal breach of trust.
+   - Do NOT apply Cyber Crime sections (IT Act 66D / BNS 319) merely because payment was made via UPI/PhonePe unless actual digital impersonation or hacking occurred.
 
-Strict Legal Guardrails:
-1. Strict Ingredient Matching:
-   - Identify the exact complaint category in Telugu.
-   - BNS 319(2) (వ్యక్త్యానుకరణ ద్వారా మోసం): గరిష్ట శిక్ష 5 సంవత్సరాల వరకు, లేదా జరిమానా, లేదా రెండూ. కాగ్నిజబుల్, బెయిలబుల్.
-   - BNS 318(4) (మోసపూరిత ప్రేరణతో ఆస్తి బదిలీ): గరిష్ట శిక్ష 7 సంవత్సరాలు మరియు జరిమానా. కాగ్నిజబుల్, నాన్-బెయిలబుల్.
-   - IT Act 66D: కంప్యూటర్ లేదా కమ్యూనికేషన్ పరికరాన్ని ఉపయోగించి మోసం చేసినప్పుడు మాత్రమే చేర్చాలి.
-   - IT Act 66C: పాస్‌వర్డ్, డిజిటల్ సంతకం లేదా గుర్తింపు దొంగిలించినప్పుడు మాత్రమే చేర్చాలి.
-   - శారీరక దాడి/గాయాలు/బెదిరింపులకు తగిన BNS సెక్షన్లు (Sec 115, Sec 351, Sec 352 etc.) జతచేయాలి.
+2. FINANCIAL & FACTUAL AUDIT:
+   - If financial transactions are mentioned, extract: Total Amount Paid, Refunded Amount, and Net Outstanding / Loss. Verify whether the arithmetic balances.
 
-2. BNSS Procedure Guidelines (ఇవన్నీ తెలుగులో వివరించాలి):
-   - Section 173(3) BNSS: 3 నుండి 7 సంవత్సరాల లోపు శిక్ష గల నేరాల్లో DSP అనుమతితో 14 రోజుల PE కి అనుమతి. సైబర్ మోసాల్లో అత్యవసరంగా డైరెక్ట్ FIR నమోదు.
-   - Section 35(3) BNSS: 7 సంవత్సరాలలోపు శిక్ష గల నేరాల్లో నిందితునికి ముందుగా హాజరు నోటీసు ఇవ్వాలి.
-   - Section 187(3) BNSS: 10 సంవత్సరాల లోపు శిక్షకు 60 రోజులు, తీవ్ర నేరాలకు 90 రోజుల గరిష్ట కస్టడీ గడువు (డిఫాల్ట్ బెయిల్).
-   - Section 193(3)(ii) BNSS: ప్రతి 90 రోజులకు బాధితునికి దర్యాప్తు పురోగతి నివేదిక తప్పనిసరి.
+3. STRICT TELUGU OUTPUT REQUIREMENT:
+   - All descriptive text, key facts, legal justifications, procedural steps, and checklists MUST be generated STRICTLY IN PROFESSIONAL TELUGU.
+   - Keep section numbers and act names explicit and standardized (e.g., 'Section 318(4) BNS', 'Section 316 BNS', 'Section 173 BNSS', 'Section 63(4) BSA').
 
-3. BSA Evidence Compliance (తెలుగులో):
-   - Section 63(4) BSA: ఎలక్ట్రానిక్ సాక్ష్యాలకు నోడల్ ఆఫీసర్ సర్టిఫికెట్ తప్పనిసరి.
-   - Section 105 BNSS: సెర్చ్ & సీజర్ సమయంలో ఆడియో-వీడియో ఎలక్ట్రానిక్ రికార్డింగ్.
-   - Section 176(3) BNSS: 7+ సంవత్సరాల శిక్ష గల కేసుల్లో ఫోరెన్సిక్ బృందం సందర్శన.
-
-4. IO Action Checklist (కనీసం 6 నుండి 8 పక్కా చట్టబద్ధమైన దర్యాప్తు చర్యలు - పూర్తి తెలుగులో):
-   - Section 94 BNSS కింద బ్యాంకులకు నోటీసులు & Section 107 BNSS కింద ఖాతాల ఫ్రీజింగ్.
-   - Section 94 BNSS కింద TSP లకు CDR, IPDR, SDR కొరకు నోటీసులు.
-   - Section 105 BNSS ప్రకారం పరికరాల స్వాధీనం & వీడియోగ్రఫీ.
-   - Section 63(4) BSA కింద డిజిటల్ ఆధారాల సర్టిఫికేషన్.
-   - Section 35(3) BNSS హాజరు నోటీసు జారీ.
-   - Section 193(3)(ii) BNSS ప్రకారం 90 రోజుల్లో బాధితునికి అప్‌డేట్.
-
-MANDATORY OUTPUT FORMAT:
-Output ONLY a single valid JSON object. All field values must be in Telugu:
+OUTPUT FORMAT:
+Return ONLY a single valid JSON object strictly matching this schema:
 {
   "complaint_category": "నేరం వర్గం (తెలుగులో)",
-  "key_facts": ["ఫిర్యాదు నుండి ముఖ్య వాస్తవాలు (తెలుగులో)"],
+  "key_facts": ["ఫిర్యాదు నుండి సేకరించిన ముఖ్య వాస్తవాలు (తెలుగులో)"],
+  "financial_audit": {
+    "total_claimed_paid": "చెల్లించిన మొత్తం (వర్తిస్తే, లేదంటే N/A)",
+    "refunded_amount": "తిరిగి ఇచ్చిన మొత్తం (వర్తిస్తే, లేదంటే N/A)",
+    "net_loss_due": "మిగిలిన బకాయి/నష్టం (వర్తిస్తే, లేదంటే N/A)",
+    "reconciliation_status": "లెక్కల ధ్రువీకరణ స్థితి"
+  },
   "applicable_sections": [
     {
       "act": "చట్టం పేరు (e.g., BNS, 2023)",
       "section": "సెక్షన్ నంబర్ (e.g., Section 318(4))",
       "offence_name": "నేరం పేరు (తెలుగులో)",
-      "punishment": "శిక్ష వివరాలు (తెలుగులో)",
-      "classification": "వర్గీకరణ (కాగ్నిజబుల్ / నాన్-బెయిలబుల్)",
-      "justification": "చట్టపరమైన సమర్థన (తెలుగులో)"
+      "punishment": "శిక్ష వివరాలు",
+      "classification": "కాగ్నిజబుల్ / నాన్-బెయిలబుల్ / బెయిలబుల్",
+      "justification": "ఈ కేసుకు ఈ నిర్దిష్ట సెక్షన్ ఎందుకు వర్తిస్తుందో డాక్యుమెంట్ ఆధారిత సమర్థన"
     }
   ],
   "bnss_procedure": {
-    "fir_or_pe_rule": "FIR లేదా ప్రాథమిక విచారణ నిబంధన (తెలుగులో)",
-    "notice_or_arrest": "హాజరు నోటీసు లేదా అరెస్ట్ నిబంధన (తెలుగులో)",
-    "detention_default_bail_timeline": "డిఫాల్ట్ బెయిల్ మరియు కస్టడీ గడువు (తెలుగులో)",
-    "victim_update_rule": "బాధితునికి సమాచారం ఇచ్చే గడువు (తెలుగులో)"
+    "fir_or_pe_rule": "Section 173 BNSS కింద విచారణ లేదా FIR నిబంధన",
+    "notice_or_arrest": "Section 35(3) BNSS కింద హాజరు నోటీసు / అరెస్ట్ మార్గదర్శకం",
+    "detention_default_bail_timeline": "Section 187 BNSS కస్టడీ మరియు డిఫాల్ట్ బెయిల్ గడువు",
+    "victim_update_rule": "Section 193(3)(ii) BNSS బాధితునికి దర్యాప్తు పురోగతి నివేదిక"
   },
   "bsa_evidence_rules": {
-    "electronic_evidence_cert": "ఎలక్ట్రానిక్ సాక్ష్యాధారాల ధ్రువీకరణ నిబంధన (తెలుగులో)",
-    "videography_rule": "వీడియోగ్రఫీ నిబంధన (తెలుగులో)",
-    "forensic_visit_rule": "ఫోరెన్సిక్ నిపుణుల సందర్శన నిబంధన (తెలుగులో)"
+    "electronic_evidence_cert": "Section 63(4) BSA ఎలక్ట్రానిక్ సాక్ష్యాధారాల సర్టిఫికెట్ నిబంధన",
+    "videography_rule": "Section 105 BNSS సెర్చ్ మరియు సీజర్ వీడియోగ్రఫీ నిబంధన",
+    "forensic_visit_rule": "Section 176(3) BNSS ఫోరెన్సిక్ సందర్శన నిబంధన"
   },
   "io_action_checklist": [
-    "దర్యాప్తు అధికారి చేపట్టాల్సిన చర్య 1 (తెలుగులో)",
-    "దర్యాప్తు అధికారి చేపట్టాల్సిన చర్య 2 (తెలుగులో)"
+    "దర్యాప్తు అధికారి (IO) ఈ కేసులో చేపట్టాల్సిన చట్టబద్ధమైన చర్య 1",
+    "దర్యాప్తు అధికారి (IO) ఈ కేసులో చేపట్టాల్సిన చట్టబద్ధమైన చర్య 2"
   ]
 }
 """
 
-# UI Inputs
 user_complaint = st.text_area(
     "ఫిర్యాదు వివరాలను టైప్ చేయండి (Complaint Text):",
-    placeholder="ఉదాహరణ: సైబర్ మోసం, శారీరక దాడి, బెదిరింపులు లేదా దొంగతనం వివరాలు...",
+    placeholder="ఉదాహరణ: ఫిర్యాదు సారాంశం నమోదు చేయండి...",
     height=150
 )
 
 uploaded_files = st.file_uploader(
-    "సంబంధిత డాక్యుమెంట్లు, PDFలు, స్క్రీన్‌షాట్లు లేదా ఇమేజ్‌లను అప్‌లోడ్ చేయండి (Multiple files allowed):",
+    "సంబంధిత డాక్యుమెంట్లు లేదా ఫిర్యాదు ఇమేజ్‌లను అప్‌లోడ్ చేయండి:",
     type=["pdf", "jpg", "jpeg", "png", "txt"],
     accept_multiple_files=True
 )
@@ -269,56 +199,71 @@ with col_btn:
 
 if analyze_button:
     if not api_key:
-        st.error("❌ Groq API కీ కనుగొనబడలేదు. దయచేసి Streamlit Secrets లో `GROQ_API_KEY` ని కాన్ఫిగర్ చేయండి లేదా సైడ్‌బార్‌లో నమోదు చేయండి.")
+        st.error("❌ OpenAI API కీ కనుగొనబడలేదు. దయచేసి Streamlit secrets లో `OPENAI_API_KEY` ని కాన్ఫిగర్ చేయండి లేదా సైడ్‌బార్‌లో నమోదు చేయండి.")
     elif not user_complaint.strip() and not uploaded_files:
-        st.warning("దయచేసి ఫిర్యాదు పాఠ్యాన్ని నమోదు చేయండి లేదా ఏదైనా డాక్యుమెంట్/స్క్రీన్‌షాట్ అప్‌లోడ్ చేయండి.")
+        st.warning("దయచేసి ఫిర్యాదు పాఠ్యాన్ని నమోదు చేయండి లేదా ఏదైనా పత్రం/ఇమేజ్ అప్‌లోడ్ చేయండి.")
     else:
-        with st.spinner(f"ఫిర్యాదు వివరాలను `{selected_model}` ద్వారా విశ్లేషిస్తోంది..."):
+        with st.spinner("పత్రంలోని పాఠ్యాన్ని OCR ద్వారా సేకరించి OpenAI GPT ద్వారా విశ్లేషిస్తోంది..."):
             try:
-                combined_content = f"User Complaint Text:\n{user_complaint}\n\n"
+                combined_content = ""
+                if user_complaint.strip():
+                    combined_content += f"Complainant Written Statement:\n{user_complaint}\n\n"
+                
                 if uploaded_files:
-                    combined_content += "--- Attached Documents / Files Content ---\n"
+                    combined_content += "--- Extracted Content from Uploaded Files/Images ---\n"
                     for file in uploaded_files:
                         file_text = extract_text_from_file(file)
-                        combined_content += f"\nFile Name: {file.name}\n{file_text}\n"
+                        combined_content += f"\nFile: {file.name}\n{file_text}\n"
 
-                client = OpenAI(api_key=api_key, base_url=base_url)
+                with st.expander("📄 అప్‌లోడ్ చేసిన పత్రాల నుండి సేకరించిన పాఠ్యం (OCR Raw Text)", expanded=False):
+                    st.text(combined_content)
+
+                # Official OpenAI Client (uses api.openai.com)
+                client = OpenAI(api_key=api_key)
 
                 response = client.chat.completions.create(
                     model=selected_model,
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": f"Analyze this complaint and documents thoroughly. Generate the complete JSON response STRICTLY IN TELUGU:\n\n{combined_content}"}
+                        {"role": "user", "content": f"Analyze this complaint and documents thoroughly. Identify ALL applicable criminal sections and return strictly valid JSON:\n\n{combined_content}"}
                     ],
-                    temperature=0.1,
-                    max_tokens=4096
+                    temperature=0.1
                 )
 
                 raw_output = response.choices[0].message.content.strip()
-
-                try:
-                    report_data = repair_and_parse_json(raw_output)
-                except Exception:
-                    report_data = generate_fallback_report(user_complaint if user_complaint else "Complaint with attachments")
+                report_data = repair_and_parse_json(raw_output)
 
                 st.success("విశ్లేషణ విజయవంతంగా పూర్తయింది!")
-                st.markdown(f"### 📂 నేరం వర్గం: `{report_data.get('complaint_category', 'సాధారణ నేరం')}`")
+                st.markdown(f"### 📂 నేరం వర్గం: `{report_data.get('complaint_category', 'ఆర్థిక నేరం')}`")
 
                 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-                    "📌 ముఖ్య వాస్తవాలు (Facts)",
-                    "⚖️ వర్తించే సెక్షన్లు (Sections)",
+                    "📌 ముఖ్య వాస్తవాలు & ఆర్థిక లెక్కలు",
+                    "⚖️ వర్తించే చట్టబద్ధమైన సెక్షన్లు",
                     "🏛️ BNSS ప్రక్రియలు (Procedures)",
                     "🔍 BSA ఆధారాలు & ఫోరెన్సిక్స్",
                     "📋 IO యాక్షన్ చెక్‌లిస్ట్"
                 ])
 
                 with tab1:
-                    st.subheader("ఫిర్యాదు & డాక్యుమెంట్ల నుండి సేకరించిన ప్రాథమిక అంశాలు")
+                    st.subheader("ఫిర్యాదు నుండి సేకరించిన ముఖ్య వాస్తవాలు")
                     for fact in report_data.get("key_facts", []):
                         st.markdown(f"* {fact}")
+                    
+                    fin = report_data.get("financial_audit")
+                    if fin and any(v != "N/A" for v in fin.values()):
+                        st.markdown("---")
+                        st.subheader("💰 లావాదేవీల లెక్కల పరిశీలన (Financial Audit)")
+                        f1, f2, f3 = st.columns(3)
+                        with f1:
+                            st.metric("చెల్లించిన మొత్తం", fin.get("total_claimed_paid", "N/A"))
+                        with f2:
+                            st.metric("తిరిగి ఇచ్చిన మొత్తం", fin.get("refunded_amount", "N/A"))
+                        with f3:
+                            st.metric("మిగిలిన బకాయి (నష్టం)", fin.get("net_loss_due", "N/A"))
+                        st.caption(f"స్టేటస్: **{fin.get('reconciliation_status', 'ధ్రువీకరించబడింది')}**")
 
                 with tab2:
-                    st.subheader("BNS / IT Act / ఇతర చట్టాల సెక్షన్లు & శిక్షల వివరాలు")
+                    st.subheader("చట్టపరంగా వర్తించే ఖచ్చితమైన సెక్షన్లు & శిక్షల వివరాలు")
                     sections = report_data.get("applicable_sections", [])
                     if sections:
                         for sec in sections:
@@ -335,13 +280,13 @@ if analyze_button:
                 with tab3:
                     st.subheader("BNSS దర్యాప్తు గడువులు మరియు నిబంధనలు")
                     bnss = report_data.get("bnss_procedure", {})
-                    st.markdown(f"**1. FIR / ప్రాథమిక విచారణ (Section 173(3) BNSS):**\n\n{bnss.get('fir_or_pe_rule')}")
+                    st.markdown(f"**1. FIR నమోదు / ప్రాథమిక విచారణ (Section 173 BNSS):**\n\n{bnss.get('fir_or_pe_rule')}")
                     st.markdown("---")
                     st.markdown(f"**2. హాజరు నోటీసు / అరెస్ట్ (Section 35 BNSS):**\n\n{bnss.get('notice_or_arrest')}")
                     st.markdown("---")
-                    st.markdown(f"**3. డిఫాల్ట్ బెయిల్ / నిర్బంధ పరిమితి (Section 187(3) BNSS):**\n\n{bnss.get('detention_default_bail_timeline')}")
+                    st.markdown(f"**3. డిఫాల్ట్ బెయిల్ / కస్టడీ గడువు (Section 187 BNSS):**\n\n{bnss.get('detention_default_bail_timeline')}")
                     st.markdown("---")
-                    st.markdown(f"**4. బాధితునికి పురోగతి నివేదిక (Section 193(3)(ii) BNSS):**\n\n{bnss.get('victim_update_rule')}")
+                    st.markdown(f"**4. బాధితునికి పురోగతి నివేదిక (Section 193 BNSS):**\n\n{bnss.get('victim_update_rule')}")
 
                 with tab4:
                     st.subheader("సాక్ష్యాధారాల ధ్రువీకరణ & ఫోరెన్సిక్ మార్గదర్శకాలు")
