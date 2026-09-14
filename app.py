@@ -39,6 +39,8 @@ if api_key:
 if not api_key:
     st.sidebar.warning("⚠️ Streamlit Secrets లో API కీ లభించలేదు.")
     api_key = st.sidebar.text_input("OpenRouter API Key ని ఇక్కడ నమోదు చేయండి:", type="password")
+    if api_key:
+        api_key = str(api_key).strip().strip('"').strip("'")
 
 base_url = "https://openrouter.ai/api/v1"
 
@@ -141,7 +143,7 @@ with col_btn:
 
 if analyze_button:
     if not api_key:
-        st.error("API కీ కనుగొనబడలేదు. దయచేసి Streamlit Secrets లో `OPENROUTER_API_KEY` ని కాన్ఫిగర్ చేయండి లేదా సైడ్‌బార్‌లో నమోదు చేయండి.")
+        st.error("❌ API కీ కనుగొనబడలేదు. దయచేసి Streamlit Secrets లో `OPENROUTER_API_KEY` ని కాన్ఫిగర్ చేయండి లేదా సైడ్‌బార్‌లో నమోదు చేయండి.")
     elif not user_complaint.strip() and not uploaded_files:
         st.warning("దయచేసి ఫిర్యాదు పాఠ్యాన్ని నమోదు చేయండి లేదా ఏదైనా డాక్యుమెంట్/స్క్రీన్‌షాట్ అప్‌లోడ్ చేయండి.")
     else:
@@ -155,11 +157,12 @@ if analyze_button:
                         file_text = extract_text_from_file(file)
                         combined_content += f"\nFile Name: {file.name}\n{file_text}\n"
 
-                # OpenAI Client configured for OpenRouter with proper headers
+                # Explicit Authorization Header to prevent 401 error with OpenRouter
                 client = OpenAI(
                     api_key=api_key,
                     base_url=base_url,
                     default_headers={
+                        "Authorization": f"Bearer {api_key}",
                         "HTTP-Referer": "https://streamlit.io",
                         "X-Title": "AI Legal Investigation Assistant"
                     }
