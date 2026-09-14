@@ -364,3 +364,5 @@ if st.button("⚖️ Analyse uploaded material and generate research report", ty
             st.download_button("Download TXT report", data=report, file_name="police_legal_research_report.txt", mime="text/plain", use_container_width=True)
 
 st.caption("Before official action, independently verify current statutory text, BNSS First Schedule, local procedure, jurisdiction, facts, admissibility and supervisory/legal review.")
+
+
