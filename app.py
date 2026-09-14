@@ -28,7 +28,7 @@ except Exception:
     PDF_AVAILABLE = False
 
 NEW_LAWS_START = date(2024, 7, 1)
-MODEL_NAME = "llama-3.3-70b-versatile"  # Groq యొక్క ఉత్తమ మరియు స్థిరమైన మోడల్
+MODEL_NAME = "openai/gpt-oss-120b"  # Groq యొక్క ఉత్తమ మరియు స్థిరమైన మోడల్
 MAX_CHARS = 30_000
 
 @dataclass(frozen=True)
