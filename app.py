@@ -1640,8 +1640,14 @@ if analyze_button:
 
 st.divider()
 
+st.divider()
+
 st.caption(
-    "⚠️ AI-assisted legal/investigation support only. "
+    "⚠️ ఈ టూల్ AI-assisted legal/investigation support కోసం మాత్రమే.\n\n"
+    "చట్టంలోని అధికారిక పాఠ్యం, ప్రస్తుత amendments, కేసు వాస్తవాలు, "
+    "సాక్ష్యాలు మరియు supervisory/legal review ను స్వతంత్రంగా "
+    "ధృవీకరించిన తర్వాత మాత్రమే అధికారిక నిర్ణయాలు లేదా చర్యలు తీసుకోవాలి.\n\n"
+    "AI-assisted legal/investigation support only. "
     "Statutory text, current amendments, case facts and "
     "supervisory/legal review must be independently verified."
 )
