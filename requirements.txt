@@ -1,4 +1,6 @@
 streamlit
 openai
-PyPDF2
-Pillow
+pillow
+pypdf2
+easyocr
+opencv-python-headless
