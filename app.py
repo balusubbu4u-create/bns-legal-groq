@@ -25,7 +25,7 @@ try:
         api_key = st.secrets["GROQ_API_KEY"]
     elif "groq_api_key" in st.secrets:
         api_key = st.secrets["groq_api_key"]
-    elif "OPENROUTER_API_KEY" in st.secrets: # Fallback if named differently
+    elif "OPENROUTER_API_KEY" in st.secrets:
         api_key = st.secrets["OPENROUTER_API_KEY"]
 except Exception:
     pass
@@ -33,18 +33,25 @@ except Exception:
 if not api_key:
     api_key = os.environ.get("GROQ_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
 
-# Clean any whitespace, quotes or hidden newlines from the key
+# Clean key
 if api_key:
     api_key = str(api_key).strip().strip('"').strip("'")
 
-# Fallback sidebar option if secrets are missing
+# Sidebar for Model Selection and Key fallback
+st.sidebar.header("⚙️ సెట్టింగ్స్")
+selected_model = st.sidebar.selectbox(
+    "Groq మోడల్‌ను ఎంచుకోండి:",
+    options=["llama-3.1-8b-instant", "openai/gpt-oss-120b", "openai/gpt-oss-20b"],
+    index=0,
+    help="llama-3.1-8b-instant ప్రతి Groq అకౌంట్‌లో ఉచితంగా 100% పనిచేస్తుంది."
+)
+
 if not api_key:
-    st.sidebar.warning("⚠️ Streamlit Secrets లో Groq API కీ లభించలేదు.")
+    st.sidebar.warning("⚠️ Groq API కీ లభించలేదు.")
     api_key = st.sidebar.text_input("Groq API Key (gsk_...) ని ఇక్కడ నమోదు చేయండి:", type="password")
     if api_key:
         api_key = str(api_key).strip().strip('"').strip("'")
 
-# Groq OpenAI-compatible endpoint
 base_url = "https://api.groq.com/openai/v1"
 
 # Helper function to extract text from uploaded files (PDF, Images, TXT)
@@ -150,7 +157,7 @@ if analyze_button:
     elif not user_complaint.strip() and not uploaded_files:
         st.warning("దయచేసి ఫిర్యాదు పాఠ్యాన్ని నమోదు చేయండి లేదా ఏదైనా డాక్యుమెంట్/స్క్రీన్‌షాట్ అప్‌లోడ్ చేయండి.")
     else:
-        with st.spinner("ఫిర్యాదు మరియు అప్‌లోడ్ చేసిన డాక్యుమెంట్లను విశ్లేషిస్తోంది..."):
+        with st.spinner(f"ఫిర్యాదు వివరాలను `{selected_model}` ద్వారా విశ్లేషిస్తోంది..."):
             try:
                 combined_content = f"User Complaint Text:\n{user_complaint}\n\n"
                 
@@ -160,14 +167,14 @@ if analyze_button:
                         file_text = extract_text_from_file(file)
                         combined_content += f"\nFile Name: {file.name}\n{file_text}\n"
 
-                # OpenAI Client configured for Groq Endpoint
+                # Direct OpenAI Client targeted at Groq
                 client = OpenAI(
                     api_key=api_key,
                     base_url=base_url
                 )
 
                 response = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",  # Groq యొక్క శక్తివంతమైన మోడల్
+                    model=selected_model,
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": f"Analyze this complaint and attached documents, then produce the specified JSON report:\n\n{combined_content}"}
