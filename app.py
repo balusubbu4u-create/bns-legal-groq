@@ -8,7 +8,24 @@ from groq import Groq
 
 
 # =========================================================
-# PAGE CONFIG
+# OPTIONAL OCR / PDF LIBRARIES
+# =========================================================
+
+try:
+    import pytesseract
+    OCR_AVAILABLE = True
+except Exception:
+    OCR_AVAILABLE = False
+
+try:
+    from pypdf import PdfReader
+    PDF_AVAILABLE = True
+except Exception:
+    PDF_AVAILABLE = False
+
+
+# =========================================================
+# STREAMLIT PAGE CONFIG
 # =========================================================
 
 st.set_page_config(
@@ -19,7 +36,7 @@ st.set_page_config(
 
 st.title("⚖️ పోలీస్ లీగల్ & ఇన్వెస్టిగేషన్ అసిస్టెంట్")
 st.caption(
-    "BNS • BNSS • BSA • IT Act ఆధారంగా preliminary legal & investigation assistance"
+    "BNS • BNSS • BSA • IT Act | Complaint Analysis • OCR • Investigation Support"
 )
 
 
@@ -33,10 +50,11 @@ MODEL_NAME = "openai/gpt-oss-120b"
 
 
 # =========================================================
-# API KEY
+# GROQ CLIENT
 # =========================================================
 
 def get_groq_client():
+
     api_key = None
 
     try:
@@ -45,43 +63,40 @@ def get_groq_client():
         pass
 
     if not api_key:
-        api_key = os.environ.get("GROQ_API_KEY")
+        api_key = os.getenv("GROQ_API_KEY")
 
     if not api_key:
         st.error(
-            "❌ GROQ_API_KEY కనుగొనబడలేదు.\n\n"
-            "Streamlit Cloud → Settings → Secrets లో GROQ_API_KEY ఇవ్వండి."
+            "❌ GROQ_API_KEY కనబడలేదు.\n\n"
+            "Streamlit Cloud → Settings → Secrets లో "
+            "GROQ_API_KEY add చేయండి."
         )
         st.stop()
 
     return Groq(api_key=api_key)
 
 
-client = get_groq_client()
+# =========================================================
+# TELUGU DIGITS
+# =========================================================
+
+TELUGU_DIGITS = str.maketrans(
+    "౦౧౨౩౪౫౬౭౮౯",
+    "0123456789"
+)
+
+
+def normalize_digits(text):
+
+    if not text:
+        return ""
+
+    return text.translate(TELUGU_DIGITS)
 
 
 # =========================================================
 # MONTH DICTIONARIES
 # =========================================================
-
-TELUGU_MONTHS = {
-    "జనవరి": 1,
-    "ఫిబ్రవరి": 2,
-    "మార్చి": 3,
-    "ఏప్రిల్": 4,
-    "మే": 5,
-    "జూన్": 6,
-    "జూలై": 7,
-    "ఆగస్టు": 8,
-    "సెప్టెంబర్": 9,
-    "సెప్టెంబరు": 9,
-    "అక్టోబర్": 10,
-    "అక్టోబరు": 10,
-    "నవంబర్": 11,
-    "నవంబరు": 11,
-    "డిసెంబర్": 12,
-    "డిసెంబరు": 12,
-}
 
 ENGLISH_MONTHS = {
     "january": 1,
@@ -107,385 +122,605 @@ ENGLISH_MONTHS = {
     "november": 11,
     "nov": 11,
     "december": 12,
-    "dec": 12,
+    "dec": 12
+}
+
+
+TELUGU_MONTHS = {
+    "జనవరి": 1,
+    "ఫిబ్రవరి": 2,
+    "మార్చి": 3,
+    "ఏప్రిల్": 4,
+    "మే": 5,
+    "జూన్": 6,
+    "జులై": 7,
+    "జూలై": 7,
+    "ఆగస్టు": 8,
+    "సెప్టెంబర్": 9,
+    "సెప్టెంబరు": 9,
+    "అక్టోబర్": 10,
+    "అక్టోబరు": 10,
+    "నవంబర్": 11,
+    "నవంబరు": 11,
+    "డిసెంబర్": 12,
+    "డిసెంబరు": 12
 }
 
 
 # =========================================================
-# TELUGU DIGITS → ENGLISH DIGITS
-# =========================================================
-
-TELUGU_DIGITS = str.maketrans(
-    "౦౧౨౩౪౫౬౭౮౯",
-    "0123456789"
-)
-
-
-def normalize_digits(text):
-    if not text:
-        return ""
-    return text.translate(TELUGU_DIGITS)
-
-
-# =========================================================
-# DATE PARSING
+# SAFE DATE CREATION
 # =========================================================
 
 def safe_date(year, month, day):
+
     try:
-        return date(int(year), int(month), int(day))
+
+        if year < 100:
+            year += 2000
+
+        return date(year, month, day)
+
     except Exception:
         return None
 
 
+# =========================================================
+# NUMERIC DATE PARSER
+# =========================================================
+
 def parse_date_string(value):
-    """
-    Supports:
-    10-09-2026
-    10/09/2026
-    10.09.2026
-    2026-09-10
-    10-09-26
-    """
 
     if not value:
         return None
 
     value = normalize_digits(value.strip())
 
-    # YYYY-MM-DD
-    m = re.search(
-        r"\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b",
-        value
-    )
-
-    if m:
-        return safe_date(
-            m.group(1),
-            m.group(2),
-            m.group(3)
-        )
-
-    # DD-MM-YYYY / DD/MM/YYYY / DD.MM.YYYY
-    m = re.search(
-        r"\b(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2})\b",
-        value
-    )
-
-    if m:
-        return safe_date(
-            m.group(3),
-            m.group(2),
-            m.group(1)
-        )
-
-    # DD-MM-YY
-    m = re.search(
+    patterns = [
+        r"\b(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\b",
+        r"\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})\b",
         r"\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})\b",
-        value
-    )
+    ]
 
-    if m:
-        year = int(m.group(3))
+    for pattern in patterns:
 
-        if year <= 49:
-            year += 2000
-        else:
-            year += 1900
+        match = re.search(pattern, value)
 
-        return safe_date(
-            year,
-            m.group(2),
-            m.group(1)
-        )
+        if not match:
+            continue
+
+        groups = match.groups()
+
+        try:
+
+            if len(groups[0]) == 4:
+
+                year = int(groups[0])
+                month = int(groups[1])
+                day = int(groups[2])
+
+            else:
+
+                day = int(groups[0])
+                month = int(groups[1])
+                year = int(groups[2])
+
+                if year < 100:
+                    year += 2000
+
+            return safe_date(year, month, day)
+
+        except Exception:
+            continue
 
     return None
 
 
+# =========================================================
+# NAMED MONTH DATE PARSER
+# =========================================================
+
 def parse_named_month_date(text):
-    """
-    Examples:
-    10 September 2026
-    10 September, 2026
-    10 సెప్టెంబర్ 2026
-    10 సెప్టెంబర్ 2026న
-    """
 
     if not text:
         return None
 
-    text = normalize_digits(text)
+    normalized = normalize_digits(text)
 
-    # English
-    month_pattern_en = "|".join(
+    month_pattern = "|".join(
         sorted(
-            [re.escape(x) for x in ENGLISH_MONTHS.keys()],
+            list(ENGLISH_MONTHS.keys()) +
+            list(TELUGU_MONTHS.keys()),
             key=len,
             reverse=True
         )
     )
 
-    pattern_en = rf"\b(\d{{1,2}})\s+({month_pattern_en})[,\s]+(20\d{{2}})\b"
+    patterns = [
 
-    m = re.search(
-        pattern_en,
-        text,
-        flags=re.IGNORECASE
-    )
+        # 10 September 2026
+        rf"\b(\d{{1,2}})\s+({month_pattern})\s+(\d{{4}})\b",
 
-    if m:
-        day = int(m.group(1))
-        month_name = m.group(2).lower()
-        year = int(m.group(3))
+        # September 10 2026
+        rf"\b({month_pattern})\s+(\d{{1,2}})[,\s]+(\d{{4}})\b",
 
-        month = ENGLISH_MONTHS.get(month_name)
+        # 10 సెప్టెంబర్ 2026
+        rf"(\d{{1,2}})\s*({month_pattern})\s*(\d{{4}})",
 
-        if month:
-            return safe_date(year, month, day)
+    ]
 
-    # Telugu
-    month_pattern_te = "|".join(
-        sorted(
-            [re.escape(x) for x in TELUGU_MONTHS.keys()],
-            key=len,
-            reverse=True
+    for pattern in patterns:
+
+        match = re.search(
+            pattern,
+            normalized,
+            flags=re.IGNORECASE
         )
-    )
 
-    pattern_te = rf"(\d{{1,2}})\s*({month_pattern_te})\s*(20\d{{2}})"
+        if not match:
+            continue
 
-    m = re.search(pattern_te, text)
+        groups = match.groups()
 
-    if m:
-        day = int(m.group(1))
-        month_name = m.group(2)
-        year = int(m.group(3))
+        try:
 
-        month = TELUGU_MONTHS.get(month_name)
+            if groups[0].isdigit():
 
-        if month:
-            return safe_date(year, month, day)
+                day = int(groups[0])
+                month_name = groups[1].lower()
+                year = int(groups[2])
+
+            else:
+
+                month_name = groups[0].lower()
+                day = int(groups[1])
+                year = int(groups[2])
+
+            month = None
+
+            for key, value in ENGLISH_MONTHS.items():
+
+                if key.lower() == month_name.lower():
+                    month = value
+                    break
+
+            if month is None:
+
+                for key, value in TELUGU_MONTHS.items():
+
+                    if key.lower() == month_name.lower():
+                        month = value
+                        break
+
+            if month:
+                return safe_date(year, month, day)
+
+        except Exception:
+            continue
 
     return None
 
 
 # =========================================================
-# RELATIVE DATE
+# RELATIVE DATE DETECTION
 # =========================================================
 
 def extract_relative_date(text, reference_date):
+
     if not text:
         return None, None
 
     lower = text.lower()
 
-    # Telugu
-    if "ఈ రోజు" in text or "ఈరోజు" in text:
-        return reference_date, "ఈ రోజు"
+    # TODAY
+    if re.search(r"\b(today)\b", lower) or "ఈ రోజు" in text or "ఈరోజు" in text:
 
-    if "నిన్న" in text:
-        return reference_date - timedelta(days=1), "నిన్న"
+        return reference_date, "Today / ఈ రోజు"
 
-    if "మొన్న" in text:
-        return reference_date - timedelta(days=2), "మొన్న"
+    # YESTERDAY
+    if re.search(r"\b(yesterday)\b", lower) or "నిన్న" in text:
 
-    if "నిన్న మొన్న" in text:
-        return reference_date - timedelta(days=2), "నిన్న మొన్న"
+        return reference_date - timedelta(days=1), "Yesterday / నిన్న"
 
-    # English
-    if re.search(r"\btoday\b", lower):
-        return reference_date, "today"
+    # DAY BEFORE YESTERDAY
+    if (
+        "day before yesterday" in lower
+        or "మొన్న" in text
+    ):
 
-    if re.search(r"\byesterday\b", lower):
-        return reference_date - timedelta(days=1), "yesterday"
+        return reference_date - timedelta(days=2), "Day before yesterday / మొన్న"
 
-    if re.search(r"\bday before yesterday\b", lower):
-        return reference_date - timedelta(days=2), "day before yesterday"
+    # LAST WEEK
+    if (
+        "last week" in lower
+        or "గత వారం" in text
+    ):
 
-    # Last week
-    if "గత వారం" in text or "గతవారం" in text:
-        return reference_date - timedelta(days=7), "గత వారం"
+        return reference_date - timedelta(days=7), "Last week / గత వారం"
 
-    if re.search(r"\blast week\b", lower):
-        return reference_date - timedelta(days=7), "last week"
+    # THIS WEEK
+    if (
+        "this week" in lower
+        or "ఈ వారం" in text
+    ):
+
+        return reference_date, "This week / ఈ వారం"
 
     return None, None
 
 
 # =========================================================
 # INCIDENT DATE EXTRACTION
+#
+# IMPORTANT:
+# EXPLICIT DATE ALWAYS HAS PRIORITY OVER
+# RELATIVE DATE.
 # =========================================================
 
 def extract_incident_date(text, reference_date):
+
     if not text:
-        return None, None
+        return None, "Not detected"
 
     text = normalize_digits(text)
 
     # -----------------------------------------------------
-    # 1. Relative dates
+    # PRIORITY 1:
+    # NUMERIC EXPLICIT DATE
     # -----------------------------------------------------
 
-    rel_date, rel_text = extract_relative_date(
+    numeric_patterns = [
+        r"\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b",
+        r"\b\d{1,2}[-/.]\d{1,2}[-/.]\d{4}\b",
+        r"\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2}\b"
+    ]
+
+    for pattern in numeric_patterns:
+
+        match = re.search(pattern, text)
+
+        if match:
+
+            parsed = parse_date_string(match.group(0))
+
+            if parsed:
+                return parsed, f"Explicit numeric date: {match.group(0)}"
+
+    # -----------------------------------------------------
+    # PRIORITY 2:
+    # NAMED MONTH DATE
+    # -----------------------------------------------------
+
+    named_date = parse_named_month_date(text)
+
+    if named_date:
+
+        return named_date, "Explicit named-month date"
+
+    # -----------------------------------------------------
+    # PRIORITY 3:
+    # RELATIVE DATE
+    # -----------------------------------------------------
+
+    relative_date, source = extract_relative_date(
         text,
         reference_date
     )
 
-    if rel_date:
-        return rel_date, rel_text
+    if relative_date:
 
-    # -----------------------------------------------------
-    # 2. Explicit numeric date
-    # -----------------------------------------------------
+        return relative_date, source
 
-    date_keywords = [
-        "సంఘటన తేదీ",
-        "సంఘటన జరిగిన తేదీ",
-        "ఘటన తేదీ",
-        "ఘటన జరిగిన తేదీ",
-        "నేరం జరిగిన తేదీ",
-        "నేరం తేదీ",
-        "ఘటన",
-        "సంఘటన",
-        "occurrence date",
-        "incident date",
-        "date of incident",
-        "date of occurrence",
-        "occurred on",
-        "on"
-    ]
-
-    # First try dates near incident-related words
-    for keyword in date_keywords:
-        idx = text.lower().find(keyword.lower())
-
-        if idx >= 0:
-            nearby = text[idx:idx + 180]
-
-            d = parse_date_string(nearby)
-
-            if d:
-                return d, nearby[:100]
-
-            d = parse_named_month_date(nearby)
-
-            if d:
-                return d, nearby[:100]
-
-    # -----------------------------------------------------
-    # 3. Search all numeric dates
-    # -----------------------------------------------------
-
-    patterns = [
-        r"\b\d{1,2}[-/.]\d{1,2}[-/.]20\d{2}\b",
-        r"\b20\d{2}[-/.]\d{1,2}[-/.]\d{1,2}\b",
-        r"\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2}\b",
-    ]
-
-    for pattern in patterns:
-        m = re.search(pattern, text)
-
-        if m:
-            d = parse_date_string(m.group(0))
-
-            if d:
-                return d, m.group(0)
-
-    # -----------------------------------------------------
-    # 4. Named month dates
-    # -----------------------------------------------------
-
-    d = parse_named_month_date(text)
-
-    if d:
-        return d, str(d)
-
-    return None, None
+    return None, "Not detected"
 
 
 # =========================================================
-# LAW SELECTION
+# LEGAL REFERENCE
 # =========================================================
 
-def select_law(incident_date, pending_case=False):
+LEGAL_REFERENCE = r"""
+STRICT LEGAL SECTION MAPPING
+
+BNS = Bharatiya Nyaya Sanhita, 2023
+BNSS = Bharatiya Nagarik Suraksha Sanhita, 2023
+BSA = Bharatiya Sakshya Adhiniyam, 2023
+IT Act = Information Technology Act, 2000
+
+
+=========================================================
+BNS 318 — CHEATING
+=========================================================
+
+BNS 318(1):
+Definition / ingredients of cheating.
+
+BNS 318(2):
+Punishment for cheating:
+Up to 3 years imprisonment, or fine, or both.
+
+BNS 318(3):
+Special form where offender was bound by law or legal contract
+to protect the interests of the person concerned.
+
+BNS 318(4):
+Cheating + dishonest inducement to deliver property or valuable security.
+Punishment up to 7 years and fine.
+
+IMPORTANT:
+DO NOT select BNS 318(4) merely because money was lost.
+
+The facts must support:
+1. deception,
+2. dishonest/fraudulent inducement,
+3. delivery of property/valuable security where applicable,
+4. causal connection between deception and delivery.
+
+
+=========================================================
+BNS 319 — CHEATING BY PERSONATION
+=========================================================
+
+BNS 319(1):
+Cheating by personation.
+
+BNS 319(2):
+Punishment up to 5 years, or fine, or both.
+
+IMPORTANT:
+Do NOT apply BNS 319 merely because:
+- a phone was used,
+- an app was used,
+- an unknown person called,
+- someone claimed to be a representative.
+
+There must be facts supporting PERSONATION.
+
+
+=========================================================
+IT ACT 66C
+=========================================================
+
+Identity theft.
+
+Apply only where there is fraudulent/dishonest use of:
+- another person's electronic signature,
+- password,
+- or unique identification feature.
+
+
+=========================================================
+IT ACT 66D
+=========================================================
+
+Cheating by personation using:
+- communication device, OR
+- computer resource.
+
+IMPORTANT:
+Use only when BOTH are supported:
+1. personation,
+2. computer resource / communication device use.
+
+Do not apply merely because the transaction occurred online.
+
+
+=========================================================
+BNSS
+=========================================================
+
+BNSS 173:
+Information in cognizable cases.
+
+BNSS 174:
+Information as to non-cognizable cases.
+
+BNSS 175:
+Police officer's power to investigate cognizable case.
+
+BNSS 176:
+Procedure for investigation.
+
+BNSS 179:
+Police officer's power to require attendance of witnesses.
+
+BNSS 180:
+Examination of witnesses by police.
+
+BNSS 181:
+Statements to police and use thereof.
+
+BNSS 185:
+Search by police officer.
+
+BNSS 193:
+Report of police officer on completion of investigation.
+
+
+IMPORTANT:
+Do NOT describe BNSS 173 as a generic CDR request provision.
+
+For CDR/IPDR/bank/app/platform records:
+describe them as records to be obtained through the applicable
+lawful investigative/requisition process.
+
+
+=========================================================
+BSA SECTION 63
+=========================================================
+
+BSA Section 63:
+Admissibility of electronic records.
+
+BSA 63(4):
+Where a statement is desired to be given in evidence by virtue
+of Section 63, the required certificate contains information
+regarding:
+- identification of electronic record,
+- manner of production,
+- device particulars,
+- prescribed conditions.
+
+IMPORTANT:
+Do NOT say:
+"Every electronic evidence automatically requires a BSA 63 certificate."
+
+Instead:
+Assess whether the particular electronic record is being
+tendered in evidence under Section 63 and whether the statutory
+certificate requirement applies.
+
+Do NOT automatically name a certificate issuer.
+
+Identify:
+- source,
+- device/system,
+- person/entity in lawful control,
+- manner of production,
+- hash/details where applicable,
+and state that certificate applicability/issuer requires
+factual and legal verification.
+
+
+=========================================================
+BNSS FIRST SCHEDULE CLASSIFICATION
+=========================================================
+
+BNS 318(2):
+Non-cognizable
+Bailable
+Any Magistrate
+
+BNS 318(3):
+Non-cognizable
+Bailable
+Any Magistrate
+
+BNS 318(4):
+Cognizable
+Non-bailable
+Magistrate of the First Class
+
+BNS 319(2):
+Cognizable
+Bailable
+Any Magistrate
+
+IMPORTANT:
+Only provide cognizable/bailable/court classification
+when the exact subsection is selected.
+
+
+=========================================================
+LEGAL FRAMEWORK
+=========================================================
+
+For offences occurring on or after 01-07-2024:
+Normally consider:
+BNS + BNSS + BSA.
+
+For offences occurring before 01-07-2024:
+Normally consider the then-applicable:
+IPC + CrPC + Indian Evidence Act,
+subject to applicable savings/transitional provisions.
+
+If date is uncertain:
+DO NOT force a legal framework.
+Mark it as requiring verification.
+"""
+
+
+# =========================================================
+# DETERMINE LEGAL FRAMEWORK
+# =========================================================
+
+def determine_framework(incident_date):
+
     if not incident_date:
-        return {
-            "framework": "UNKNOWN",
-            "title": "చట్టాల framework నిర్ణయించడానికి సంఘటన తేదీ అవసరం",
-            "reason": (
-                "Incident/occurrence date నిర్ధారించబడలేదు. "
-                "BNS/BNSS/BSA లేదా IPC/CrPC/IEA applicability "
-                "fact-specificగా verify చేయాలి."
-            )
-        }
+
+        return (
+            "Incident date not established",
+            False
+        )
 
     if incident_date >= NEW_LAW_DATE:
 
-        if pending_case:
-            return {
-                "framework": "NEW_LAW_WITH_TRANSITION_REVIEW",
-                "title": "BNS / BNSS / BSA — transitional review required",
-                "reason": (
-                    f"సంఘటన తేదీ {incident_date.strftime('%d-%m-%Y')}. "
-                    "01-07-2024 తర్వాతి సంఘటనగా కనిపిస్తోంది. "
-                    "అయితే pending proceeding/savings issue ఉంటే separately verify చేయాలి."
-                )
-            }
-
-        return {
-            "framework": "NEW_LAW",
-            "title": "BNS / BNSS / BSA",
-            "reason": (
-                f"సంఘటన తేదీ {incident_date.strftime('%d-%m-%Y')}. "
-                "01-07-2024 నుంచి కొత్త criminal laws అమలులో ఉన్నాయి."
-            )
-        }
-
-    return {
-        "framework": "OLD_LAW",
-        "title": "IPC / CrPC / Indian Evidence Act",
-        "reason": (
-            f"సంఘటన తేదీ {incident_date.strftime('%d-%m-%Y')}. "
-            "సంఘటన 01-07-2024 కంటే ముందు జరిగినట్లు కనిపిస్తోంది. "
-            "Savings/transitional provisionsను facts ప్రకారం verify చేయాలి."
+        return (
+            "BNS 2023 + BNSS 2023 + BSA 2023",
+            False
         )
-    }
+
+    return (
+        "Pre-01-07-2024 framework: IPC + CrPC + Indian Evidence Act "
+        "(subject to savings/transitional provisions)",
+        True
+    )
 
 
 # =========================================================
-# FILE EXTRACTION
+# FILE TEXT EXTRACTION
 # =========================================================
 
-def extract_pdf_text(uploaded_file):
+def extract_text_from_pdf(uploaded_file):
+
+    if not PDF_AVAILABLE:
+
+        return (
+            "PDF extraction library 'pypdf' is not installed."
+        )
+
     try:
-        from pypdf import PdfReader
 
         reader = PdfReader(uploaded_file)
 
         pages = []
 
-        for page in reader.pages:
+        for index, page in enumerate(reader.pages):
+
             try:
+
                 text = page.extract_text()
+
                 if text:
-                    pages.append(text)
+                    pages.append(
+                        f"\n--- PDF Page {index + 1} ---\n{text}"
+                    )
+
             except Exception:
                 continue
 
-        return "\n\n".join(pages)
+        result = "\n".join(pages)
+
+        if result.strip():
+            return result
+
+        return (
+            "PDF text could not be extracted. "
+            "If this is a scanned PDF, OCR support may be required."
+        )
 
     except Exception as e:
-        return f"[PDF extraction error: {e}]"
+
+        return f"PDF extraction error: {str(e)}"
 
 
-def extract_image_text(uploaded_file):
+# =========================================================
+# IMAGE OCR
+# =========================================================
+
+def extract_text_from_image(uploaded_file):
+
+    if not OCR_AVAILABLE:
+
+        return (
+            "OCR library 'pytesseract' is not installed."
+        )
+
     try:
-        import pytesseract
 
         image = Image.open(uploaded_file)
 
         # First try Telugu + English
         try:
+
             text = pytesseract.image_to_string(
                 image,
                 lang="tel+eng"
@@ -499,132 +734,98 @@ def extract_image_text(uploaded_file):
 
         # Fallback English
         try:
+
             text = pytesseract.image_to_string(
                 image,
                 lang="eng"
             )
+
             return text
 
         except Exception as e:
-            return f"[OCR error: {e}]"
+
+            return f"OCR error: {str(e)}"
 
     except Exception as e:
-        return f"[Image OCR error: {e}]"
+
+        return f"Image processing error: {str(e)}"
 
 
-def extract_text_file(uploaded_file):
-    try:
-        raw = uploaded_file.read()
+# =========================================================
+# GENERAL FILE EXTRACTION
+# =========================================================
 
-        for encoding in ["utf-8", "utf-16", "cp1252"]:
-            try:
-                return raw.decode(encoding)
-            except Exception:
-                continue
+def extract_uploaded_text(uploaded_file):
 
-        return raw.decode("utf-8", errors="ignore")
-
-    except Exception as e:
-        return f"[Text extraction error: {e}]"
-
-
-def extract_uploaded_file(uploaded_file):
     if not uploaded_file:
         return ""
 
-    filename = uploaded_file.name.lower()
+    file_name = uploaded_file.name.lower()
 
-    if filename.endswith(".pdf"):
-        return extract_pdf_text(uploaded_file)
+    # -----------------------------------------------------
+    # PDF
+    # -----------------------------------------------------
 
-    if filename.endswith(
-        (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff")
+    if file_name.endswith(".pdf"):
+
+        return extract_text_from_pdf(uploaded_file)
+
+    # -----------------------------------------------------
+    # IMAGE
+    # -----------------------------------------------------
+
+    if file_name.endswith(
+        (
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp",
+            ".bmp",
+            ".tif",
+            ".tiff"
+        )
     ):
-        return extract_image_text(uploaded_file)
 
-    if filename.endswith(
-        (".txt", ".csv", ".log")
+        return extract_text_from_image(uploaded_file)
+
+    # -----------------------------------------------------
+    # TEXT FILES
+    # -----------------------------------------------------
+
+    if file_name.endswith(
+        (
+            ".txt",
+            ".csv",
+            ".log"
+        )
     ):
-        return extract_text_file(uploaded_file)
+
+        try:
+
+            raw = uploaded_file.read()
+
+            for encoding in [
+                "utf-8",
+                "utf-8-sig",
+                "cp1252",
+                "latin-1"
+            ]:
+
+                try:
+                    return raw.decode(encoding)
+                except Exception:
+                    continue
+
+            return raw.decode("utf-8", errors="ignore")
+
+        except Exception as e:
+
+            return f"Text file extraction error: {str(e)}"
 
     return (
-        "[Unsupported file type. "
-        "PDF/JPG/JPEG/PNG/WEBP/TXT files మాత్రమే support చేయండి.]"
+        "Unsupported file format. "
+        "Use PDF, JPG, JPEG, PNG, WEBP, BMP, TIFF, TXT, CSV or LOG."
     )
-
-
-# =========================================================
-# VERIFIED LEGAL ANCHORS
-# =========================================================
-
-LEGAL_REFERENCE = """
-
-IMPORTANT VERIFIED LEGAL ANCHORS
---------------------------------
-
-These are legal anchors. Do NOT automatically apply all of them.
-Select only those supported by the facts.
-
-BNS:
-318(1) - Cheating definition.
-318(2) - Cheating; punishment up to 3 years, or fine, or both.
-318(3) - Cheating where offender was bound by law/legal contract to protect
-         the victim's interest; punishment up to 5 years, or fine, or both.
-318(4) - Cheating with dishonest inducement to deliver property or make,
-         alter or destroy valuable security etc.; punishment up to 7 years
-         and fine.
-319(1) - Cheating by personation definition.
-319(2) - Cheating by personation; punishment up to 5 years, or fine, or both.
-
-IMPORTANT:
-Do NOT use BNS 318(4) merely because money was lost.
-The analysis must identify dishonest inducement and delivery of property.
-
-Do NOT use BNS 319 merely because a fraud occurred online.
-There must be personation / pretending to be another person / substitution
-or representation that one person is another.
-
-INFORMATION TECHNOLOGY ACT, 2000:
-Section 66C - Identity theft.
-Section 66D - Cheating by personation using computer resource or communication
-device.
-
-IMPORTANT:
-Do NOT automatically apply IT Act 66C or 66D to every UPI/bank/cyber fraud.
-66C requires facts supporting identity theft as defined by the provision.
-66D requires cheating by personation using computer resource/communication
-device.
-
-BSA:
-Section 61 - Electronic or digital record.
-Section 62 - Special provisions relating to electronic records.
-Section 63 - Admissibility of electronic records.
-Section 63(4) - Certificate requirements where electronic record is sought
-to be admitted by virtue of Section 63.
-
-IMPORTANT:
-Do NOT say "every electronic evidence always requires BSA 63 certificate"
-as a blanket rule.
-Instead determine whether the particular electronic record is being relied
-upon under Section 63 and whether the statutory certificate requirement
-applies.
-
-BNSS:
-Section 173 - Information in cognizable cases.
-Section 174 - Information relating to non-cognizable cases.
-Section 175 - Police officer's power to investigate cognizable case.
-Section 176 - Procedure for investigation.
-Section 179 - Police officer's power to require attendance of witnesses.
-Section 180 - Examination of witnesses by police.
-Section 181 - Statements to police and use thereof.
-Section 185 - Search by police officer.
-Section 193 - Report of police officer on completion of investigation.
-
-OLD LAW FRAMEWORK:
-For incidents before commencement of the new criminal laws, examine IPC,
-CrPC and Indian Evidence Act applicability, subject to repeal/savings and
-transitional provisions.
-"""
 
 
 # =========================================================
@@ -632,325 +833,384 @@ transitional provisions.
 # =========================================================
 
 SYSTEM_PROMPT = f"""
-You are an expert Indian criminal-law and police-investigation analysis
-assistant.
+You are a senior Indian criminal-law research and investigation
+assistant supporting police officers.
 
-Your job is NOT to blindly generate sections.
+Your response MUST be in clear Telugu.
 
-You must analyse the complaint facts and identify the most legally appropriate
-provisions, while clearly distinguishing:
-1. Strongly supported sections
-2. Possible/additional sections
-3. Sections NOT supported by the facts
+Use legal terminology accurately.
 
-The output must be in SIMPLE PROFESSIONAL TELUGU.
-Legal section names may be written in English where useful.
+Do NOT hallucinate facts.
+
+You must distinguish:
+- facts stated in complaint,
+- reasonable investigative possibilities,
+- facts requiring verification.
+
+Never present an unverified fact as established fact.
 
 {LEGAL_REFERENCE}
 
-============================================================
-CRITICAL LEGAL ANALYSIS RULES
-============================================================
 
-RULE 1:
-Do not invent a section merely because a keyword appears in the complaint.
+=========================================================
+DATE RULE
+=========================================================
 
-RULE 2:
-For every proposed substantive offence, explain the factual ingredients
-which are satisfied.
+The incident/occurrence date must be identified carefully.
 
-RULE 3:
-If an exact section cannot be determined from the complaint, say:
-"Facts ఆధారంగా verification అవసరం."
+If the complaint contains both:
+- an explicit date, and
+- a relative expression such as "గత వారం", "నిన్న",
+  "last week", "yesterday",
 
-RULE 4:
-Never present a doubtful section as definitely applicable.
+THE EXPLICIT DATE HAS PRIORITY.
 
-RULE 5:
-For cheating cases distinguish:
-- BNS 318(2)
-- BNS 318(3)
-- BNS 318(4)
-- BNS 319(2)
+Example:
+"10 September 2026 జరిగిన విషయం, గత వారం..." 
+=> occurrence date must be 10-09-2026 if context supports it.
 
-RULE 6:
-For cyber cases distinguish:
-- BNS cheating/personation
-- IT Act 66C
-- IT Act 66D
-Only recommend the IT Act provision when its ingredients are present.
+Never allow "గత వారం" to override an explicit occurrence date.
 
-RULE 7:
-For electronic evidence identify:
-- WhatsApp chats
-- SMS
-- Email
-- Call records
-- CCTV
-- Mobile phone data
-- UPI transaction records
-- Bank statements
-- Device extraction
-- Social media records
-- IP/login records
-- Cloud records
-- Screenshots
+Distinguish:
+- occurrence date,
+- complaint/report date,
+- call date,
+- payment date,
+- discovery date.
 
-Then explain whether BSA Section 63 is relevant and whether a certificate
-should be considered.
+Do not confuse them.
 
-RULE 8:
-Do not claim that a screenshot alone proves the identity of the sender.
-Identify what additional evidence is required.
 
-RULE 9:
-For cognizable/non-cognizable, bailable/non-bailable and court:
-Use the applicable statutory classification where known.
-Do not guess.
+=========================================================
+LEGAL SECTION RULES
+=========================================================
 
-RULE 10:
-BNSS procedural sections should be suggested only when relevant to the
-investigation step.
+BNS 318(4):
+Do not select merely because money was lost.
 
-RULE 11:
-Incident date is important for selecting the broad legal framework.
-However, do NOT state that date alone mechanically resolves every
-transitional/savings issue.
+BNS 319:
+Do not select merely because a person called and claimed to be
+a company/app/bank representative.
+There must be personation facts.
 
-RULE 12:
-If the complaint contains insufficient facts, clearly identify the missing
-facts required for legal conclusion.
+IT Act 66C:
+Require use of another person's electronic signature/password/
+unique identification feature.
 
-============================================================
-INVESTIGATION APPROACH
-============================================================
+IT Act 66D:
+Require personation + computer resource/communication device.
 
-Analyse:
+Do not automatically apply both 66C and 66D.
 
-A. Occurrence / incident
-B. Accused role
-C. Victim role
-D. Mens rea / dishonest intention
-E. Actus reus
-F. Property / money / document involved
-G. Digital elements
-H. Identity/personation elements
-I. Evidence available
-J. Evidence still required
-K. Witnesses
-L. Bank / UPI / telecom / platform records
-M. CCTV / device evidence
-N. Search/seizure requirements
-O. BSA electronic evidence requirements
-P. Investigation steps
-Q. Possible sections
-R. Sections that should NOT be mechanically added
-S. Further facts required
+Do not invent sections merely because the incident involved
+a mobile phone, internet, app, UPI or website.
 
-============================================================
+
+=========================================================
+COGNIZABLE / BAILABLE RULE
+=========================================================
+
+Use the exact BNSS First Schedule classification only.
+
+Do not say:
+"generally cognizable"
+"generally bailable"
+"may be non-bailable"
+
+when an exact subsection has been selected.
+
+For:
+318(2) = Non-cognizable, Bailable, Any Magistrate
+318(3) = Non-cognizable, Bailable, Any Magistrate
+318(4) = Cognizable, Non-bailable, Magistrate First Class
+319(2) = Cognizable, Bailable, Any Magistrate
+
+
+=========================================================
+EVIDENCE RULE
+=========================================================
+
+Do not invent evidence.
+
+If complaint mentions:
+- call,
+- SMS,
+- WhatsApp,
+- bank transaction,
+- UPI,
+- app,
+- email,
+- CCTV,
+
+then analyse it.
+
+If it is NOT mentioned:
+write:
+"Complaintలో ఈ evidence ప్రస్తావన లేదు; availability ఉన్నదా
+అని verify చేయాలి."
+
+Do not state that CCTV/WhatsApp/GPS exists unless complaint says so.
+
+
+=========================================================
+BSA SECTION 63
+=========================================================
+
+Explain Section 63 as electronic-record admissibility provision.
+
+Do not say every digital record automatically requires a certificate.
+
+Explain that where electronic record is sought to be admitted
+by virtue of Section 63, the statutory certificate requirement
+under Section 63(4) must be considered.
+
+Do not automatically say:
+"Telecom officer will issue it"
+or
+"bank manager will issue it"
+or
+"forensic lab will issue it".
+
+Instead identify:
+source/device/system,
+lawful control,
+production method,
+hash/details where relevant,
+and state that the exact certificate source/issuer requires
+verification based on the record and applicable law.
+
+
+=========================================================
+BNSS RULE
+=========================================================
+
+Do not use BNSS 173 as a generic CDR provision.
+
+For CDR/IPDR:
+say:
+"CDR/IPDRను సంబంధిత telecom/service provider వద్ద applicable
+lawful investigative/requisition process ద్వారా obtain చేయాలి."
+
+For bank records:
+identify bank transaction statement, beneficiary details,
+UTR/RRN, account/KYC details subject to lawful process.
+
+For app/platform records:
+identify account/device/IP/login/payment records where relevant,
+but do not claim they exist unless verified.
+
+
+=========================================================
 OUTPUT FORMAT
-============================================================
+=========================================================
 
-# ⚖️ LEGAL & INVESTIGATION ANALYSIS
+Use exactly these headings:
 
-## 1. సంఘటన సారాంశం
-Complaint factsను conciseగా చెప్పాలి.
+1. సంఘటన సారాంశం
 
-## 2. సంఘటన తేదీ
-- Detected date:
-- Source phrase:
-- Confidence:
-- Reference date:
-- Date verification required? Yes/No
+2. సంఘటన తేదీ
 
-## 3. Applicable Legal Framework
-- BNS / BNSS / BSA OR old framework
-- Reason
+3. Applicable Legal Framework
 
-## 4. Primary Offence
-Table:
+4. Primary Offence
 
-| Section | Offence | Why applicable | Confidence |
-|---|---|---|---|
+5. Additional / Alternative Sections
 
-## 5. Additional / Alternative Sections
-Table:
+6. Automatically NOT Applicable Sections
 
-| Section | Provision | When applicable | Confidence |
-|---|---|---|---|
+7. Cognizable / Bailable / Court Classification
 
-## 6. Sections NOT automatically applicable
-Especially explain if BNS 319 / IT Act 66C / 66D are not supported.
+8. Digital Evidence
 
-## 7. Cognizable / Bailable / Court
-Only where statutory classification is confidently established.
-Otherwise state "Official Schedule verification required."
+9. BSA Section 63 Analysis
 
-## 8. Digital Evidence
-List:
-- Device
-- Chats
-- Screenshots
-- Bank/UPI
+10. Investigation Plan
+
+11. Documents / Records to Obtain
+
+12. Witnesses
+
+13. Missing Facts Requiring Verification
+
+14. Final Legal View
+
+15. Important Disclaimer
+
+
+=========================================================
+TABLE RULE
+=========================================================
+
+Where useful use markdown tables.
+
+For legal sections include:
+Section
+Reason
+Why applicable / not applicable
+Classification if established
+
+
+=========================================================
+INVESTIGATION PLAN
+=========================================================
+
+Keep it practical.
+
+Possible items may include, only when relevant:
+- victim statement
+- bank statement
+- UTR/RRN
+- beneficiary account details
+- KYC details
+- transaction timestamps
+- mobile number details
+- CDR/IPDR
+- device information
+- app/package information
+- URLs/domains
+- screenshots
+- call recordings
+- SMS
+- WhatsApp/chat
+- email headers
 - CCTV
-- Call records
-- Email
-- IP/logs
-- Cloud/platform data
+- platform records
+- seizure/forensic preservation
 
-## 9. BSA Section 63 Analysis
-Clearly state:
-- Is electronic record being relied upon?
-- Why Section 63 may be relevant?
-- Is certificate requirement relevant?
-- What source/device details should be preserved?
-- Hash value / forensic preservation if relevant
-- Who is the person/entity capable of supplying the required certificate,
-  based on the source and statutory schedule
-- Do not invent a particular certificate issuer when facts are insufficient.
+But do not claim any item exists unless complaint confirms it.
 
-## 10. Investigation Plan
-Numbered steps.
 
-## 11. Documents / Records to Obtain
-Separate:
-- Victim
-- Bank
-- UPI/payment intermediary
-- Telecom
-- Platform/social media
-- CCTV
-- Device/forensic
+=========================================================
+STYLE
+=========================================================
 
-## 12. Witnesses
-Who should be examined and what fact they can establish.
+Use clear Telugu.
 
-## 13. Missing Facts
-Questions that investigator should verify.
+Keep English legal section names where useful.
 
-## 14. Final Legal View
-Use one of:
-- Strongly supported
-- Prima facie supported
-- Requires further verification
-- Facts insufficient
+Do not produce fake FIR numbers,
+fake case numbers,
+fake dates,
+fake police station names,
+fake accused names,
+fake evidence,
+fake court orders,
+fake citations.
 
-Add:
-"This is a preliminary analytical aid and final legal decision must be
-based on the complete case record and applicable law."
+If information is insufficient, clearly say:
+"ధృవీకరించాలి."
 
-============================================================
-LANGUAGE
-============================================================
-
-Use professional Telugu.
-Do not use unnecessary English.
-Use English for legal section titles where precision is improved.
+Do not overstate conclusions.
 """
 
 
 # =========================================================
-# USER PROMPT BUILDER
+# BUILD USER PROMPT
 # =========================================================
 
 def build_user_prompt(
-    case_text,
+    complaint_text,
     extracted_text,
     reference_date,
     incident_date,
-    incident_source,
-    law_info,
-    pending_case
+    date_source,
+    framework,
+    transitional
 ):
 
-    combined = ""
+    combined_text = ""
 
-    if case_text:
-        combined += "\n--- USER ENTERED COMPLAINT ---\n"
-        combined += case_text
+    if complaint_text:
+        combined_text += (
+            "\n\n===== USER ENTERED COMPLAINT =====\n"
+            + complaint_text
+        )
 
     if extracted_text:
-        combined += "\n--- UPLOADED DOCUMENT / OCR TEXT ---\n"
-        combined += extracted_text
+        combined_text += (
+            "\n\n===== UPLOADED FILE / OCR TEXT =====\n"
+            + extracted_text
+        )
+
+    if incident_date:
+
+        detected_date_text = incident_date.strftime(
+            "%d-%m-%Y"
+        )
+
+    else:
+
+        detected_date_text = "Not detected"
 
     return f"""
-Analyse the following police complaint/case.
+Analyze the following police complaint/case information.
 
 REFERENCE DATE:
-{reference_date.strftime('%d-%m-%Y')}
+{reference_date.strftime("%d-%m-%Y")}
 
-DETECTED INCIDENT DATE:
-{incident_date.strftime('%d-%m-%Y') if incident_date else "NOT DETECTED"}
+PROGRAMMATICALLY DETECTED INCIDENT DATE:
+{detected_date_text}
 
 DATE SOURCE:
-{incident_source if incident_source else "NOT DETECTED"}
+{date_source}
 
-LEGAL FRAMEWORK:
-{law_info["title"]}
+PROGRAMMATICALLY SELECTED LEGAL FRAMEWORK:
+{framework}
 
-FRAMEWORK REASON:
-{law_info["reason"]}
-
-PENDING / TRANSITIONAL CASE FLAG:
-{"YES - transitional/savings issue must be reviewed" if pending_case else "NO"}
+TRANSITIONAL / PRE-01-07-2024 REVIEW:
+{"YES" if transitional else "NO"}
 
 IMPORTANT:
-Do not simply repeat the legal anchors.
-Apply them to the facts.
+The programmatically detected explicit date should be respected
+unless the complaint context clearly proves that the date refers
+to some other event such as complaint date, call date, payment date,
+or discovery date.
 
-If incident date is not detected:
-- Do not invent a date.
-- State that date verification is required.
-- Still analyse the complaint facts provisionally where possible.
+If multiple dates are present, distinguish each date.
 
-If a cyber fraud is present:
-- identify exactly what the accused allegedly did;
-- identify whether personation exists;
-- identify whether another person's identity credential was used;
-- identify whether computer/communication resource was used;
-- distinguish BNS 318 / 319 from IT Act 66C / 66D.
+{combined_text}
 
-If electronic evidence exists:
-- identify the evidence;
-- explain BSA Section 63 relevance;
-- explain preservation/certificate considerations;
-- do not overstate certificate requirements.
+Now prepare the complete Telugu legal and investigation report
+using the required 15-section format.
 
-CASE MATERIAL:
-{combined}
+Do not invent facts.
+Do not automatically apply BNS 318(4), BNS 319, IT Act 66C or
+IT Act 66D.
 """
 
 
 # =========================================================
-# GROQ CALL
+# GROQ ANALYSIS
 # =========================================================
 
 def investigate_case(
-    case_text,
+    complaint_text,
     extracted_text,
     reference_date,
     incident_date,
-    incident_source,
-    law_info,
-    pending_case
+    date_source,
+    framework,
+    transitional
 ):
 
+    client = get_groq_client()
+
     user_prompt = build_user_prompt(
-        case_text=case_text,
+        complaint_text=complaint_text,
         extracted_text=extracted_text,
         reference_date=reference_date,
         incident_date=incident_date,
-        incident_source=incident_source,
-        law_info=law_info,
-        pending_case=pending_case
+        date_source=date_source,
+        framework=framework,
+        transitional=transitional
     )
 
     try:
 
         response = client.chat.completions.create(
+
             model=MODEL_NAME,
-            temperature=0.1,
-            max_tokens=7000,
+
             messages=[
                 {
                     "role": "system",
@@ -960,16 +1220,70 @@ def investigate_case(
                     "role": "user",
                     "content": user_prompt
                 }
-            ]
+            ],
+
+            temperature=0.1,
+
+            max_tokens=7000
         )
 
         return response.choices[0].message.content
 
     except Exception as e:
+
         return (
-            "❌ AI analysis failed.\n\n"
-            f"Error: {str(e)}"
+            "❌ Groq API Error\n\n"
+            + str(e)
         )
+
+
+# =========================================================
+# DOWNLOAD REPORT
+# =========================================================
+
+def make_download_report(
+    complaint,
+    incident_date,
+    framework,
+    analysis
+):
+
+    date_text = (
+        incident_date.strftime("%d-%m-%Y")
+        if incident_date
+        else "Not detected"
+    )
+
+    report = f"""
+POLICE LEGAL & INVESTIGATION ASSISTANT
+======================================
+
+Incident Date:
+{date_text}
+
+Legal Framework:
+{framework}
+
+Complaint:
+{complaint}
+
+======================================
+LEGAL ANALYSIS
+======================================
+
+{analysis}
+
+======================================
+DISCLAIMER
+======================================
+
+This report is an AI-assisted research/investigation support
+document. It is not a substitute for statutory verification,
+case-specific legal advice, supervisory review, or court
+determination.
+"""
+
+    return report
 
 
 # =========================================================
@@ -980,38 +1294,45 @@ with st.sidebar:
 
     st.header("⚙️ Settings")
 
-    st.info(
-        "ఈ application preliminary legal-analysis aid మాత్రమే. "
-        "Final legal decision complete case record మరియు applicable law "
-        "ఆధారంగా చేయాలి."
+    st.write(
+        f"**Model:** `{MODEL_NAME}`"
     )
 
-    st.markdown("### Supported")
+    st.write(
+        "**Legal framework:** BNS / BNSS / BSA"
+    )
 
-    st.write("✅ Telugu complaints")
-    st.write("✅ English complaints")
-    st.write("✅ Photo OCR")
-    st.write("✅ PDF text")
-    st.write("✅ TXT files")
-    st.write("✅ BNS / BNSS / BSA")
-    st.write("✅ IT Act cyber analysis")
-    st.write("✅ Incident date detection")
+    st.write(
+        "**OCR:** "
+        + ("Available" if OCR_AVAILABLE else "Not available")
+    )
+
+    st.write(
+        "**PDF:** "
+        + ("Available" if PDF_AVAILABLE else "Not available")
+    )
+
+    st.divider()
+
+    st.info(
+        "Explicit incident date is given priority over "
+        "relative expressions such as 'గత వారం'."
+    )
 
 
 # =========================================================
-# CASE DETAILS
+# INPUT SECTION
 # =========================================================
 
-st.subheader("📝 1. Case / Complaint Details")
+st.subheader("📝 Complaint / Case Details")
 
-case_text = st.text_area(
-    "Complaint / Case Details",
+complaint_text = st.text_area(
+    "Complaint వివరాలు ఇక్కడ paste చేయండి",
     height=260,
     placeholder=(
-        "ఉదాహరణ:\n"
-        "10-09-2026న నిందితుడు ఫిర్యాదుదారుని ఫోన్ చేసి...\n"
-        "లేదా\n"
-        "10 సెప్టెంబర్ 2026న UPI ద్వారా డబ్బులు మోసం చేశాడు..."
+        "ఉదా:\n"
+        "10 September 2026న ఒక వ్యక్తి phone చేసి...\n"
+        "రూ.45,000 debit అయ్యింది..."
     )
 )
 
@@ -1020,22 +1341,19 @@ case_text = st.text_area(
 # REFERENCE DATE
 # =========================================================
 
-st.subheader("📅 2. Date Reference")
-
-default_reference_date = date.today()
-
 reference_date = st.date_input(
-    "Complaintలో 'నిన్న', 'గత వారం' వంటి పదాలు ఉంటే reference date",
-    value=default_reference_date
+    "📅 Reference Date",
+    value=date.today()
 )
 
 
 # =========================================================
-# PENDING CASE
+# TRANSITIONAL CHECK
 # =========================================================
 
-pending_case = st.checkbox(
-    "⚠️ ఇది పాత / pending proceeding / transitional matter కావచ్చు"
+transitional_review = st.checkbox(
+    "⚠️ Transitional / savings provisions కూడా review చేయాలి",
+    value=False
 )
 
 
@@ -1043,16 +1361,17 @@ pending_case = st.checkbox(
 # FILE UPLOAD
 # =========================================================
 
-st.subheader("📷 3. Photo / PDF / Text Upload")
+st.subheader("📷 Photo / 📄 PDF / Text Upload")
 
 uploaded_file = st.file_uploader(
-    "Complaint copy / Photo / PDF / TXT upload చేయండి",
+    "Complaint photo / PDF / text file upload చేయండి",
     type=[
         "jpg",
         "jpeg",
         "png",
         "webp",
         "bmp",
+        "tif",
         "tiff",
         "pdf",
         "txt",
@@ -1063,24 +1382,25 @@ uploaded_file = st.file_uploader(
 
 
 # =========================================================
-# FILE PROCESSING
+# EXTRACT FILE TEXT
 # =========================================================
 
 extracted_text = ""
 
 if uploaded_file:
 
-    with st.spinner("📄 File చదువుతోంది..."):
+    with st.spinner("📄 File / OCR text extract చేస్తున్నాను..."):
 
-        extracted_text = extract_uploaded_file(
+        extracted_text = extract_uploaded_text(
             uploaded_file
         )
 
     if extracted_text:
 
-        st.success("✅ File processing completed.")
-
-        with st.expander("📄 Extracted / OCR Text చూడండి"):
+        with st.expander(
+            "🔎 Extracted / OCR Text చూడండి",
+            expanded=False
+        ):
 
             st.text_area(
                 "Extracted Text",
@@ -1088,115 +1408,141 @@ if uploaded_file:
                 height=300
             )
 
-    else:
-
-        st.warning(
-            "⚠️ File నుంచి text పొందలేకపోయాం."
-        )
-
 
 # =========================================================
-# COMBINED TEXT
+# COMBINED TEXT FOR DATE DETECTION
 # =========================================================
 
-combined_text = ""
+combined_input_text = ""
 
-if case_text:
-    combined_text += case_text
+if complaint_text:
+    combined_input_text += complaint_text
 
 if extracted_text:
-    combined_text += "\n\n" + extracted_text
+    combined_input_text += "\n\n" + extracted_text
 
 
 # =========================================================
-# INCIDENT DATE
+# INCIDENT DATE DETECTION
 # =========================================================
 
-st.subheader("📅 4. Incident Date Detection")
-
-incident_date, incident_source = extract_incident_date(
-    combined_text,
+incident_date, date_source = extract_incident_date(
+    combined_input_text,
     reference_date
 )
 
 
+# =========================================================
+# LEGAL FRAMEWORK
+# =========================================================
+
+framework, transitional = determine_framework(
+    incident_date
+)
+
+if transitional_review:
+    transitional = True
+
+
+# =========================================================
+# DATE DISPLAY
+# =========================================================
+
+st.subheader("📅 సంఘటన తేదీ గుర్తింపు")
+
 if incident_date:
 
     st.success(
-        f"✅ Incident Date: "
-        f"{incident_date.strftime('%d-%m-%Y')}"
+        f"✅ Incident / Occurrence Date: "
+        f"**{incident_date.strftime('%d-%m-%Y')}**"
     )
 
-    if incident_source:
-        st.caption(
-            f"Detected from: {incident_source}"
-        )
+    st.caption(
+        f"Source: {date_source}"
+    )
 
 else:
 
     st.warning(
-        "⚠️ Incident / occurrence date గుర్తించబడలేదు."
+        "⚠️ Incident / occurrence date గుర్తించబడలేదు. "
+        "Legal framework automaticగా fix చేయడం సాధ్యం కాదు."
     )
+
+
+# =========================================================
+# FRAMEWORK DISPLAY
+# =========================================================
+
+st.subheader("⚖️ Legal Framework")
+
+if incident_date:
+
+    if incident_date >= NEW_LAW_DATE:
+
+        st.success(
+            "BNS 2023 + BNSS 2023 + BSA 2023"
+        )
+
+    else:
+
+        st.warning(
+            "Pre-01-07-2024 framework: "
+            "IPC + CrPC + Indian Evidence Act "
+            "(savings/transitional provisions review required)"
+        )
+
+else:
 
     st.info(
-        "Complaintలో occurrence date స్పష్టంగా ఉంటే "
-        "10-09-2026 / 10 సెప్టెంబర్ 2026 / నిన్న వంటి రూపంలో "
-        "ఉండేలా verify చేయండి."
+        "Incident date verify చేసిన తర్వాత legal framework "
+        "finalize చేయాలి."
     )
 
 
 # =========================================================
-# LAW FRAMEWORK
+# DEBUG INFORMATION
 # =========================================================
 
-law_info = select_law(
-    incident_date,
-    pending_case
-)
-
-
-st.subheader("⚖️ 5. Legal Framework")
-
-st.info(
-    f"**{law_info['title']}**\n\n"
-    f"{law_info['reason']}"
-)
-
-
-# =========================================================
-# DATE DEBUG
-# =========================================================
-
-with st.expander("🔎 Date Detection Debug"):
+with st.expander("🛠️ Debug / Date Detection Details"):
 
     st.write(
-        "Reference Date:",
+        "**Reference Date:**",
         reference_date.strftime("%d-%m-%Y")
     )
 
     st.write(
-        "Detected Incident Date:",
-        incident_date.strftime("%d-%m-%Y")
-        if incident_date
-        else "Not detected"
+        "**Detected Incident Date:**",
+        (
+            incident_date.strftime("%d-%m-%Y")
+            if incident_date
+            else "Not detected"
+        )
     )
 
     st.write(
-        "Detected Source:",
-        incident_source
-        if incident_source
-        else "Not detected"
+        "**Detection Source:**",
+        date_source
+    )
+
+    st.write(
+        "**Framework:**",
+        framework
+    )
+
+    st.write(
+        "**Transitional Review:**",
+        transitional
     )
 
 
 # =========================================================
-# ANALYSE BUTTON
+# ANALYZE BUTTON
 # =========================================================
 
-st.subheader("🔍 6. Legal Analysis")
+st.divider()
 
-analyse_button = st.button(
-    "⚖️ Generate Legal & Investigation Report",
+analyze_button = st.button(
+    "⚖️ Legal Analysis Generate చేయండి",
     type="primary",
     use_container_width=True
 )
@@ -1206,103 +1552,84 @@ analyse_button = st.button(
 # ANALYSIS
 # =========================================================
 
-if analyse_button:
+if analyze_button:
 
-    if not combined_text.strip():
+    if not complaint_text.strip() and not extracted_text.strip():
 
         st.error(
-            "❌ Complaint details లేదా file content ఇవ్వండి."
+            "❌ Complaint text లేదా uploaded file అవసరం."
         )
 
         st.stop()
 
-    # -----------------------------------------------------
-    # DATE WARNING
-    # -----------------------------------------------------
-
     if not incident_date:
 
         st.warning(
-            "⚠️ Incident date detect కాలేదు. "
-            "Analysis కొనసాగించవచ్చు, కానీ applicable legal framework "
-            "date-basedగా finalise చేయకూడదు."
+            "⚠️ Incident date automaticగా గుర్తించబడలేదు. "
+            "AI analysis కొనసాగుతుంది, కానీ legal framework "
+            "date-basedగా final చేయకుండా verificationగా చూపబడుతుంది."
         )
 
-    # -----------------------------------------------------
-    # AI CALL
-    # -----------------------------------------------------
-
     with st.spinner(
-        "⚖️ BNS / BNSS / BSA / IT Act provisions analyse చేస్తున్నాను..."
+        "⚖️ BNS / BNSS / BSA ఆధారంగా legal analysis చేస్తున్నాను..."
     ):
 
-        result = investigate_case(
-            case_text=case_text,
+        analysis = investigate_case(
+
+            complaint_text=complaint_text,
+
             extracted_text=extracted_text,
+
             reference_date=reference_date,
+
             incident_date=incident_date,
-            incident_source=incident_source,
-            law_info=law_info,
-            pending_case=pending_case
+
+            date_source=date_source,
+
+            framework=framework,
+
+            transitional=transitional
         )
 
     # -----------------------------------------------------
     # RESULT
     # -----------------------------------------------------
 
-    st.markdown("---")
+    st.subheader("📋 Legal Analysis Result")
 
-    st.subheader(
-        "📋 Legal & Investigation Analysis Result"
+    st.markdown(analysis)
+
+    # -----------------------------------------------------
+    # DOWNLOAD
+    # -----------------------------------------------------
+
+    report_text = make_download_report(
+
+        complaint=(
+            complaint_text
+            if complaint_text
+            else extracted_text
+        ),
+
+        incident_date=incident_date,
+
+        framework=framework,
+
+        analysis=analysis
     )
 
-    st.markdown(result)
-
-    # -----------------------------------------------------
-    # DOWNLOAD REPORT
-    # -----------------------------------------------------
-
-    report_text = f"""
-POLICE LEGAL & INVESTIGATION ASSISTANT
-======================================
-
-Reference Date:
-{reference_date.strftime('%d-%m-%Y')}
-
-Incident Date:
-{
-    incident_date.strftime('%d-%m-%Y')
-    if incident_date
-    else "Not detected"
-}
-
-Legal Framework:
-{law_info["title"]}
-
-Framework Reason:
-{law_info["reason"]}
-
---------------------------------------
-ANALYSIS
---------------------------------------
-
-{result}
-
---------------------------------------
-DISCLAIMER
---------------------------------------
-
-This report is a preliminary analytical aid.
-Final legal decision must be based on the complete case record,
-applicable statutory provisions, judicial interpretation and
-competent legal authority.
-"""
-
     st.download_button(
-        label="⬇️ Download Report as TXT",
+
+        label="📥 Report TXT Download",
+
         data=report_text,
-        file_name="legal_investigation_report.txt",
+
+        file_name=(
+            "police_legal_investigation_report.txt"
+        ),
+
         mime="text/plain",
+
         use_container_width=True
     )
 
@@ -1311,9 +1638,10 @@ competent legal authority.
 # FOOTER
 # =========================================================
 
-st.markdown("---")
+st.divider()
 
 st.caption(
-    "⚖️ Police Legal & Investigation Assistant | "
-    "Preliminary analytical assistance only"
+    "⚠️ AI-assisted legal/investigation support only. "
+    "Statutory text, current amendments, case facts and "
+    "supervisory/legal review must be independently verified."
 )
