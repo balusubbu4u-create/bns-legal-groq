@@ -16,20 +16,22 @@ import PyPDF2
 
 # App UI Header
 st.title("⚖️ BNS / BNSS / BSA Legal & Investigation Engine")
-st.caption("Powered by openai/gpt-oss-120b | భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక")
+st.caption("Powered by Groq API | భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక")
 
-# Fetch OpenRouter API Key securely from Streamlit Secrets or Environment Variables
+# Fetch Groq API Key securely from Streamlit Secrets or Environment Variables
 api_key = None
 try:
-    if "OPENROUTER_API_KEY" in st.secrets:
+    if "GROQ_API_KEY" in st.secrets:
+        api_key = st.secrets["GROQ_API_KEY"]
+    elif "groq_api_key" in st.secrets:
+        api_key = st.secrets["groq_api_key"]
+    elif "OPENROUTER_API_KEY" in st.secrets: # Fallback if named differently
         api_key = st.secrets["OPENROUTER_API_KEY"]
-    elif "openrouter_api_key" in st.secrets:
-        api_key = st.secrets["openrouter_api_key"]
 except Exception:
     pass
 
 if not api_key:
-    api_key = os.environ.get("OPENROUTER_API_KEY")
+    api_key = os.environ.get("GROQ_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
 
 # Clean any whitespace, quotes or hidden newlines from the key
 if api_key:
@@ -37,12 +39,13 @@ if api_key:
 
 # Fallback sidebar option if secrets are missing
 if not api_key:
-    st.sidebar.warning("⚠️ Streamlit Secrets లో API కీ లభించలేదు.")
-    api_key = st.sidebar.text_input("OpenRouter API Key ని ఇక్కడ నమోదు చేయండి:", type="password")
+    st.sidebar.warning("⚠️ Streamlit Secrets లో Groq API కీ లభించలేదు.")
+    api_key = st.sidebar.text_input("Groq API Key (gsk_...) ని ఇక్కడ నమోదు చేయండి:", type="password")
     if api_key:
         api_key = str(api_key).strip().strip('"').strip("'")
 
-base_url = "https://openrouter.ai/api/v1"
+# Groq OpenAI-compatible endpoint
+base_url = "https://api.groq.com/openai/v1"
 
 # Helper function to extract text from uploaded files (PDF, Images, TXT)
 def extract_text_from_file(uploaded_file):
@@ -143,7 +146,7 @@ with col_btn:
 
 if analyze_button:
     if not api_key:
-        st.error("❌ API కీ కనుగొనబడలేదు. దయచేసి Streamlit Secrets లో `OPENROUTER_API_KEY` ని కాన్ఫిగర్ చేయండి లేదా సైడ్‌బార్‌లో నమోదు చేయండి.")
+        st.error("❌ Groq API కీ కనుగొనబడలేదు. దయచేసి Streamlit Secrets లో `GROQ_API_KEY` ని కాన్ఫిగర్ చేయండి లేదా సైడ్‌బార్‌లో నమోదు చేయండి.")
     elif not user_complaint.strip() and not uploaded_files:
         st.warning("దయచేసి ఫిర్యాదు పాఠ్యాన్ని నమోదు చేయండి లేదా ఏదైనా డాక్యుమెంట్/స్క్రీన్‌షాట్ అప్‌లోడ్ చేయండి.")
     else:
@@ -157,19 +160,14 @@ if analyze_button:
                         file_text = extract_text_from_file(file)
                         combined_content += f"\nFile Name: {file.name}\n{file_text}\n"
 
-                # Explicit Authorization Header to prevent 401 error with OpenRouter
+                # OpenAI Client configured for Groq Endpoint
                 client = OpenAI(
                     api_key=api_key,
-                    base_url=base_url,
-                    default_headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "HTTP-Referer": "https://streamlit.io",
-                        "X-Title": "AI Legal Investigation Assistant"
-                    }
+                    base_url=base_url
                 )
 
                 response = client.chat.completions.create(
-                    model="openai/gpt-oss-120b",
+                    model="llama-3.3-70b-versatile",  # Groq యొక్క శక్తివంతమైన మోడల్
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": f"Analyze this complaint and attached documents, then produce the specified JSON report:\n\n{combined_content}"}
