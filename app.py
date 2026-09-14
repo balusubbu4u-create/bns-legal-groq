@@ -28,7 +28,7 @@ except Exception:
     PDF_AVAILABLE = False
 
 NEW_LAWS_START = date(2024, 7, 1)
-MODEL_NAME = "llama-3.3-70b-versatile"
+MODEL_NAME = "llama-3.1-8b-instant"
 MAX_CHARS = 30_000
 TELUGU_DIGITS = str.maketrans("౦౧౨౩౪౫౬౭౮౯", "0123456789")
 
