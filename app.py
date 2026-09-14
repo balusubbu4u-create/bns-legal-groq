@@ -9,6 +9,7 @@ st.set_page_config(
 
 import json
 import os
+import re
 from openai import OpenAI
 from io import BytesIO
 from PIL import Image
@@ -16,7 +17,7 @@ import PyPDF2
 
 # App UI Header
 st.title("⚖️ BNS / BNSS / BSA Legal & Investigation Engine")
-st.caption("Powered by Groq API (gpt-oss-20b) | భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక")
+st.caption("Powered by Groq API | భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక")
 
 # Fetch Groq API Key securely from Streamlit Secrets or Environment Variables
 api_key = None
@@ -41,7 +42,7 @@ if api_key:
 st.sidebar.header("⚙️ సెట్టింగ్స్")
 selected_model = st.sidebar.selectbox(
     "మోడల్‌ను ఎంచుకోండి:",
-    options=["openai/gpt-oss-20b", "openai/gpt-oss-120b"],
+    options=["openai/gpt-oss-20b", "openai/gpt-oss-120b", "llama-3.1-8b-instant"],
     index=0
 )
 
@@ -103,7 +104,7 @@ Strict Legal Guardrails:
    - Section 176(3) BNSS: Mandatory crime scene forensic visit for offences punishable with 7+ years, subject to state notification framework.
 
 Output Schema:
-You MUST respond with a single, pure JSON object (no introductory text, no conversational padding). Follow this exact JSON schema:
+CRITICAL: Respond ONLY with a valid JSON object. Do not include markdown codeblocks, thinking steps, or introductory text.
 {
   "complaint_category": "string",
   "key_facts": ["string"],
@@ -171,26 +172,26 @@ if analyze_button:
                     base_url=base_url
                 )
 
+                # Calling without strict JSON constraint to avoid 400 validation aborts on reasoning models
                 response = client.chat.completions.create(
                     model=selected_model,
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": f"Analyze this complaint and attached documents, then produce the specified JSON report:\n\n{combined_content}"}
+                        {"role": "user", "content": f"Analyze this complaint and attached documents, then return the report in exact JSON format:\n\n{combined_content}"}
                     ],
-                    temperature=0.1,
-                    response_format={"type": "json_object"}
+                    temperature=0.1
                 )
 
                 raw_output = response.choices[0].message.content.strip()
 
-                if raw_output.startswith("```json"):
-                    raw_output = raw_output[7:]
-                if raw_output.startswith("```"):
-                    raw_output = raw_output[3:]
-                if raw_output.endswith("```"):
-                    raw_output = raw_output[:-3]
+                # Robust JSON extraction using Regex
+                json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
+                if json_match:
+                    clean_json = json_match.group(0)
+                else:
+                    clean_json = raw_output
 
-                report_data = json.loads(raw_output.strip())
+                report_data = json.loads(clean_json)
 
                 st.success("విశ్లేషణ విజయవంతంగా పూర్తయింది!")
                 st.markdown(f"### 📂 నేరం వర్గం: `{report_data.get('complaint_category', 'General Offence')}`")
@@ -249,7 +250,7 @@ if analyze_button:
                         st.checkbox(task, key=f"io_task_{idx}")
 
             except json.JSONDecodeError:
-                st.error("మోడల్ నుండి వచ్చిన JSON ఫార్మాట్ సరిగ్గా ప్రాసెస్ కాలేదు. దయచేసి మళ్లీ ప్రయత్నించండి.")
+                st.error("మోడల్ నుండి వచ్చిన సమాధానం సరిగ్గా JSON లోకి మారలేదు. దయచేసి మళ్లీ విశ్లేషించు బటన్ నొక్కండి.")
                 st.code(raw_output)
             except Exception as e:
                 st.error(f"విశ్లేషణ సమయంలో సమస్య ఏర్పడింది: {str(e)}")
