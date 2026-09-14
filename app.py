@@ -1,3 +1,4 @@
+"""
 Comprehensive Police Legal Research & Investigation Support Tool.
 Supports all criminal offence categories under BNS, BNSS, BSA and IPC, CrPC, IEA.
 Handles PDF, JPG, PNG, Screenshots, and plain-text complaint sources.
