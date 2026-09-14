@@ -735,80 +735,80 @@ if st.button(
         if fact_error or extracted_facts is None:
             st.error(fact_error or "Could not extract cited facts.")
         else:
-        incident_date = extracted_occurrence_date(extracted_facts)
-        facts, trace = cited_facts(extracted_facts)
-        results = assessment(facts, incident_date)
-        head_rows = routed_heads(extracted_facts)
-        if head_rows:
-            st.subheader("Automatically identified case heads")
-            st.dataframe(head_rows, use_container_width=True, hide_index=True)
-        st.subheader("Automated evidence-to-rule trace")
-        basis = extracted_facts.get("occurrence_date_basis", "")
-        if incident_date:
-            st.info(
-                f"Automatically identified working occurrence date:"
-                f" {incident_date:%d-%m-%Y}. Basis: {basis or 'quoted material'}"
-            )
-        else:
-            st.warning(
-                "ఇచ్చిన పత్రాల్లో సంఘటన తేదీ స్పష్టంగా నిర్ధారించబడలేదు. అందువల్ల"
-                " app BNS/BNSS/BSA చట్టపరమైన frameworkను తుది నిర్ణయంగా"
-                " నిర్ధారించదు."
-            )
-        st.dataframe(trace, use_container_width=True, hide_index=True)
-        if results:
-            table = []
-            for item in results:
-                rule = item["rule"]
-                classification = (
-                    " / ".join(
-                        x
-                        for x in (
-                            rule.cognizable,
-                            rule.bailable,
-                            rule.court,
+            incident_date = extracted_occurrence_date(extracted_facts)
+            facts, trace = cited_facts(extracted_facts)
+            results = assessment(facts, incident_date)
+            head_rows = routed_heads(extracted_facts)
+            if head_rows:
+                st.subheader("Automatically identified case heads")
+                st.dataframe(head_rows, use_container_width=True, hide_index=True)
+            st.subheader("Automated evidence-to-rule trace")
+            basis = extracted_facts.get("occurrence_date_basis", "")
+            if incident_date:
+                st.info(
+                    f"Automatically identified working occurrence date:"
+                    f" {incident_date:%d-%m-%Y}. Basis: {basis or 'quoted material'}"
+                )
+            else:
+                st.warning(
+                    "ఇచ్చిన పత్రాల్లో సంఘటన తేదీ స్పష్టంగా నిర్ధారించబడలేదు. అందువల్ల"
+                    " app BNS/BNSS/BSA చట్టపరమైన frameworkను తుది నిర్ణయంగా"
+                    " నిర్ధారించదు."
+                )
+            st.dataframe(trace, use_container_width=True, hide_index=True)
+            if results:
+                table = []
+                for item in results:
+                    rule = item["rule"]
+                    classification = (
+                        " / ".join(
+                            x
+                            for x in (
+                                rule.cognizable,
+                                rule.bailable,
+                                rule.court,
+                            )
+                            if x
                         )
-                        if x
+                        or "Verify current procedural classification"
                     )
-                    or "Verify current procedural classification"
-                )
-                label = (
-                    "Prima facie candidate — review citations"
-                    if item["status"] == "PRIMA_FACIE_GATE_PASSED"
-                    else (
-                        "Potential candidate — occurrence date/legal regime"
-                        " verification required"
-                        if item["status"] == "POTENTIAL_DATE_UNVERIFIED"
-                        else "Requires verification"
+                    label = (
+                        "Prima facie candidate — review citations"
+                        if item["status"] == "PRIMA_FACIE_GATE_PASSED"
+                        else (
+                            "Potential candidate — occurrence date/legal regime"
+                            " verification required"
+                            if item["status"] == "POTENTIAL_DATE_UNVERIFIED"
+                            else "Requires verification"
+                        )
                     )
+                    table.append(
+                        {
+                            "Section": f"{rule.statute} {rule.section}",
+                            "Assessment": label,
+                            "Missing statutory facts": "; ".join(item["missing"])
+                            or "None",
+                            "Classification": classification,
+                        }
+                    )
+                st.subheader("Deterministic statutory-rule assessment")
+                st.dataframe(table, use_container_width=True, hide_index=True)
+            with st.spinner(
+                "Generating controlled legal-research and"
+                " investigation-support report..."
+            ):
+                report = run_analysis(
+                    material, safe_model_prompt(material, incident_date, results)
                 )
-                table.append(
-                    {
-                        "Section": f"{rule.statute} {rule.section}",
-                        "Assessment": label,
-                        "Missing statutory facts": "; ".join(item["missing"])
-                        or "None",
-                        "Classification": classification,
-                    }
-                )
-            st.subheader("Deterministic statutory-rule assessment")
-            st.dataframe(table, use_container_width=True, hide_index=True)
-        with st.spinner(
-            "Generating controlled legal-research and"
-            " investigation-support report..."
-        ):
-            report = run_analysis(
-                material, safe_model_prompt(material, incident_date, results)
+            st.subheader("Controlled AI research report")
+            st.markdown(report)
+            st.download_button(
+                "Download TXT report",
+                data=report,
+                file_name="police_legal_research_report.txt",
+                mime="text/plain",
+                use_container_width=True,
             )
-        st.subheader("Controlled AI research report")
-        st.markdown(report)
-        st.download_button(
-            "Download TXT report",
-            data=report,
-            file_name="police_legal_research_report.txt",
-            mime="text/plain",
-            use_container_width=True,
-        )
 
 st.caption(
     "Before official action, independently verify current statutory text,"
