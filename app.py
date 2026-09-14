@@ -20,7 +20,7 @@ import easyocr
 st.title("⚖️ BNS / BNSS / BSA Legal & Investigation Engine")
 st.caption("భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక (Powered by OpenAI GPT)")
 
-# Fetch OpenAI API Key securely from Streamlit secrets or Environment
+# Fetch OpenAI API Key securely strictly from Streamlit Secrets or Environment
 api_key = None
 try:
     if "OPENAI_API_KEY" in st.secrets:
@@ -36,24 +36,15 @@ if not api_key:
 if api_key:
     api_key = str(api_key).strip().strip('"').strip("'")
 
-# Sidebar: Configuration
-st.sidebar.header("⚙️ సిస్టమ్ కాన్ఫిగరేషన్")
-
-if not api_key:
-    st.sidebar.warning("⚠️ OpenAI API కీ లభించలేదు.")
-    api_key = st.sidebar.text_input("OpenAI API Key (sk-...) ని ఇక్కడ నమోదు చేయండి:", type="password")
-    if api_key:
-        api_key = str(api_key).strip().strip('"').strip("'")
-
-available_models = ["gpt-4o", "gpt-4o-mini"]
-
+# Sidebar: Model Selection only (No API Key text input box)
+st.sidebar.header("⚙️ మోడల్ ఎంపిక")
 selected_model = st.sidebar.selectbox(
     "OpenAI మోడల్‌ను ఎంచుకోండి:",
-    options=available_models,
+    options=["gpt-4o", "gpt-4o-mini"],
     index=0
 )
 
-# Cache EasyOCR Reader for Telugu and English to prevent repeated memory allocation
+# Cache EasyOCR Reader for Telugu and English
 @st.cache_resource
 def load_ocr_reader():
     return easyocr.Reader(['te', 'en'], gpu=False)
@@ -130,7 +121,7 @@ Role: You are an authoritative Indian Criminal Law Decision-Engine specialized i
 CRITICAL INSTRUCTIONS FOR UNIVERSAL SECTION MAPPING:
 1. THOROUGH COMPLAINT & OCR ANALYSIS:
    - Read the extracted text from the complaint/documents carefully without bias.
-   - Accurately extract all offences described in the complaint (e.g., Cheating, Criminal Breach of Trust, Extortion, Physical Hurt/Assault, Criminal Intimidation, Forgery, Public Servant Misconduct, Cyber Fraud, etc.).
+   - Accurately extract all offences described in the complaint (e.g., Cheating, Criminal Breach of Trust, Extortion, Physical Hurt/Assault, Criminal Intimidation, Forgery, Public Servant Misconduct, Job Scam, etc.).
    - Dynamically identify and apply ALL legally applicable sections. Do NOT restrict to any single section.
    - If the accused is a Public Servant (e.g., Police Official), examine relevant provisions for public servant misconduct and criminal breach of trust.
    - Do NOT apply Cyber Crime sections (IT Act 66D / BNS 319) merely because payment was made via UPI/PhonePe unless actual digital impersonation or hacking occurred.
@@ -199,7 +190,7 @@ with col_btn:
 
 if analyze_button:
     if not api_key:
-        st.error("❌ OpenAI API కీ కనుగొనబడలేదు. దయచేసి Streamlit secrets లో `OPENAI_API_KEY` ని కాన్ఫిగర్ చేయండి లేదా సైడ్‌బార్‌లో నమోదు చేయండి.")
+        st.error("❌ OpenAI API కీ కనుగొనబడలేదు. దయచేసి Streamlit secrets (`secrets.toml`) లో `OPENAI_API_KEY` ని కాన్ఫిగర్ చేయండి.")
     elif not user_complaint.strip() and not uploaded_files:
         st.warning("దయచేసి ఫిర్యాదు పాఠ్యాన్ని నమోదు చేయండి లేదా ఏదైనా పత్రం/ఇమేజ్ అప్‌లోడ్ చేయండి.")
     else:
@@ -218,7 +209,6 @@ if analyze_button:
                 with st.expander("📄 అప్‌లోడ్ చేసిన పత్రాల నుండి సేకరించిన పాఠ్యం (OCR Raw Text)", expanded=False):
                     st.text(combined_content)
 
-                # Official OpenAI Client (uses api.openai.com)
                 client = OpenAI(api_key=api_key)
 
                 response = client.chat.completions.create(
