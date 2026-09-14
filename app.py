@@ -18,58 +18,33 @@ import easyocr
 
 # App UI Header
 st.title("⚖️ BNS / BNSS / BSA Legal & Investigation Engine")
-st.caption("భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక (Powered by Groq)")
+st.caption("భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక (Powered by OpenAI GPT)")
 
-# Fetch Groq API Key securely
+# Fetch OpenAI API Key securely strictly from Streamlit Secrets
 api_key = None
 try:
-    if "GROQ_API_KEY" in st.secrets:
-        api_key = st.secrets["GROQ_API_KEY"]
-    elif "groq_api_key" in st.secrets:
-        api_key = st.secrets["groq_api_key"]
-    elif "OPENROUTER_API_KEY" in st.secrets:
-        api_key = st.secrets["OPENROUTER_API_KEY"]
+    if "OPENAI_API_KEY" in st.secrets:
+        api_key = st.secrets["OPENAI_API_KEY"]
+    elif "openai_api_key" in st.secrets:
+        api_key = st.secrets["openai_api_key"]
 except Exception:
     pass
 
 if not api_key:
-    api_key = os.environ.get("GROQ_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY")
 
 if api_key:
     api_key = str(api_key).strip().strip('"').strip("'")
 
-base_url = "https://api.groq.com/openai/v1"
-
-# Sidebar: Configuration
+# Sidebar: Model Selection only (No API Key input box)
 st.sidebar.header("⚙️ సిస్టమ్ కాన్ఫిగరేషన్")
-
-if not api_key:
-    st.sidebar.warning("⚠️ Groq API కీ లభించలేదు.")
-    api_key = st.sidebar.text_input("Groq API Key (gsk_...) ని ఇక్కడ నమోదు చేయండి:", type="password")
-    if api_key:
-        api_key = str(api_key).strip().strip('"').strip("'")
-
-available_models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
-if api_key:
-    try:
-        temp_client = OpenAI(api_key=api_key, base_url=base_url)
-        models_data = temp_client.models.list()
-        fetched_models = [
-            m.id for m in models_data.data 
-            if not any(x in m.id.lower() for x in ["whisper", "audio", "guard", "orpheus"])
-        ]
-        if fetched_models:
-            available_models = fetched_models
-    except Exception:
-        pass
-
 selected_model = st.sidebar.selectbox(
-    "Groq మోడల్‌ను ఎంచుకోండి:",
-    options=available_models,
+    "OpenAI మోడల్‌ను ఎంచుకోండి:",
+    options=["gpt-4o", "gpt-4o-mini"],
     index=0
 )
 
-# EasyOCR Reader for Telugu and English
+# Cache EasyOCR Reader for Telugu and English
 @st.cache_resource
 def load_ocr_reader():
     return easyocr.Reader(['te', 'en'], gpu=False)
@@ -180,8 +155,60 @@ def generate_fallback_report(complaint_text):
         ]
     }
 
-# Universal System Prompt ensuring BNS sections are explicitly generated
-Role
+# Universal System Prompt ensuring all sections are correctly mapped
+SYSTEM_PROMPT = """
+Role: You are an authoritative Indian Criminal Law Decision-Engine specialized in Bharatiya Nyaya Sanhita (BNS, 2023), Bharatiya Nagarik Suraksha Sanhita (BNSS, 2023), Bharatiya Sakshya Adhiniyam (BSA, 2023), and Special Acts.
+
+CRITICAL INSTRUCTIONS FOR SECTION MAPPING:
+1. THOROUGH COMPLAINT & OCR ANALYSIS:
+   - Read the extracted text from the complaint/documents carefully without bias.
+   - Identify ALL offences mentioned in the text (e.g., Job Scam, Cheating under BNS Section 318(4), Criminal Breach of Trust, Extortion, Assault, Intimidation, Public Servant Misconduct, etc.).
+   - Dynamically identify and include ALL relevant BNS/Special Act sections in the 'applicable_sections' list without leaving it empty. Match sections accurately to the facts.
+
+2. FINANCIAL & FACTUAL AUDIT:
+   - If money transactions are involved, extract Total Claimed Paid, Refunded amount, and Remaining Loss/Due. Verify if the math balances.
+
+3. LANGUAGE REQUIREMENT:
+   - Generate all descriptive fields, justifications, procedures, and checklists STRICTLY IN PROFESSIONAL TELUGU. 
+   - Retain Section numbers and Act names in clear standard notation (e.g., 'Section 318(4) BNS', 'Section 173 BNSS', 'Section 63(4) BSA').
+
+OUTPUT FORMAT:
+Return ONLY a single valid JSON object strictly matching this schema:
+{
+  "complaint_category": "నేరం వర్గం (తెలుగులో)",
+  "key_facts": ["ఫిర్యాదు నుండి సేకరించిన ముఖ్య వాస్తవాలు (తెలుగులో)"],
+  "financial_audit": {
+    "total_claimed_paid": "...",
+    "refunded_amount": "...",
+    "net_loss_due": "...",
+    "reconciliation_status": "..."
+  },
+  "applicable_sections": [
+    {
+      "act": "చట్టం పేరు (e.g., BNS, 2023)",
+      "section": "సెక్షన్ నంబర్ (e.g., Section 318(4))",
+      "offence_name": "నేరం పేరు (తెలుగులో)",
+      "punishment": "శిక్ష వివరాలు",
+      "classification": "కాగ్నిజబుల్ / నాన్-బెయిలబుల్ / బెయిలబుల్",
+      "justification": "ఈ కేసుకు ఈ నిర్దిష్ట సెక్షన్ ఎందుకు వర్తిస్తుందో సమర్థన"
+    }
+  ],
+  "bnss_procedure": {
+    "fir_or_pe_rule": "...",
+    "notice_or_arrest": "...",
+    "detention_default_bail_timeline": "...",
+    "victim_update_rule": "..."
+  },
+  "bsa_evidence_rules": {
+    "electronic_evidence_cert": "...",
+    "videography_rule": "...",
+    "forensic_visit_rule": "..."
+  },
+  "io_action_checklist": [
+    "దర్యాప్తు అధికారి చేపట్టాల్సిన చర్యలు..."
+  ]
+}
+"""
 
 # UI Inputs
 user_complaint = st.text_area(
@@ -202,7 +229,7 @@ with col_btn:
 
 if analyze_button:
     if not api_key:
-        st.error("❌ Groq API కీ కనుగొనబడలేదు. దయచేసి Streamlit Secrets లో `GROQ_API_KEY` ని కాన్ఫిగర్ చేయండి.")
+        st.error("❌ OpenAI API కీ కనుగొనబడలేదు. దయచేసి Streamlit Secrets లో `OPENAI_API_KEY` ని కాన్ఫిగర్ చేయండి.")
     elif not user_complaint.strip() and not uploaded_files:
         st.warning("దయచేసి ఫిర్యాదు పాఠ్యాన్ని నమోదు చేయండి లేదా ఏదైనా డాక్యుమెంట్/ఇమేజ్ అప్‌లోడ్ చేయండి.")
     else:
@@ -221,13 +248,13 @@ if analyze_button:
                 with st.expander("📄 అప్‌లోడ్ చేసిన పత్రాల నుండి సేకరించిన పాఠ్యం (OCR Raw Text)", expanded=False):
                     st.text(combined_content)
 
-                client = OpenAI(api_key=api_key, base_url=base_url)
+                client = OpenAI(api_key=api_key)
 
                 response = client.chat.completions.create(
                     model=selected_model,
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": f"Analyze this complaint and documents thoroughly. Identify ALL applicable BNS sections and return strictly valid JSON:\n\n{combined_content}"}
+                        {"role": "user", "content": f"Analyze this complaint and documents thoroughly. Identify ALL applicable sections and return strictly valid JSON:\n\n{combined_content}"}
                     ],
                     temperature=0.1,
                     max_tokens=4096
