@@ -1,3 +1,12 @@
+import streamlit as st
+
+# 1. Mandatory first Streamlit command
+st.set_page_config(
+    page_title="AI Legal & Investigation Assistant",
+    page_icon="⚖️",
+    layout="wide"
+)
+
 import json
 import os
 from openai import OpenAI
@@ -5,12 +14,6 @@ from io import BytesIO
 from PIL import Image
 import PyPDF2
 
-# 1. ఇది ఎల్లప్పుడూ మొదటి Streamlit కమాండ్‌గా ఉండాలి
-st.set_page_config(
-    page_title="AI Legal & Investigation Assistant",
-    page_icon="⚖️",
-    layout="wide"
-)
 # App UI Header
 st.title("⚖️ BNS / BNSS / BSA Legal & Investigation Engine")
 st.caption("Powered by openai/gpt-oss-120b | భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక")
@@ -37,8 +40,6 @@ def extract_text_from_file(uploaded_file):
                 if text:
                     extracted_text += text + "\n"
         elif file_extension in ['jpg', 'jpeg', 'png']:
-            # For images/screenshots, we inform the model via text that an image was attached 
-            # (or we can extract basic details if needed). Here we append a notice.
             img = Image.open(uploaded_file)
             extracted_text = f"[Attached Image File: {uploaded_file.name} of size {img.size}]\n"
         elif file_extension in ['txt', 'doc', 'docx']:
@@ -52,7 +53,7 @@ def extract_text_from_file(uploaded_file):
 SYSTEM_PROMPT = """
 Role: You are an authoritative Indian Criminal Law Decision-Engine specialized in Bharatiya Nyaya Sanhita (BNS, 2023), Bharatiya Nagarik Suraksha Sanhita (BNSS, 2023), Bharatiya Sakshya Adhiniyam (BSA, 2023), and Special Acts (such as IT Act, 2000).
 
-Task: Analyze the user complaint and uploaded document contents (any crime type: Cyber/Financial Fraud, Assault/Bodily Harm, Property Damage/Theft, Threats/Criminal Intimidation, Women/Child Safety, Breach_of_Trust, etc.) and extract strict statutory sections, procedural guidelines, evidence rules, and IO action checklists.
+Task: Analyze the user complaint and uploaded document contents (any crime type: Cyber/Financial Fraud, Assault/Bodily Harm, Property Damage/Theft, Threats/Criminal Intimidation, Women/Child Safety, Breach of Trust, etc.) and extract strict statutory sections, procedural guidelines, evidence rules, and IO action checklists.
 
 Strict Legal Guardrails:
 1. Strict Ingredient Matching:
@@ -131,7 +132,6 @@ if analyze_button:
     else:
         with st.spinner("ఫిర్యాదు మరియు అప్‌లోడ్ చేసిన డాక్యుమెంట్లను విశ్లేషిస్తోంది..."):
             try:
-                # Combine user text and extracted text from uploaded documents
                 combined_content = f"User Complaint Text:\n{user_complaint}\n\n"
                 
                 if uploaded_files:
@@ -140,7 +140,6 @@ if analyze_button:
                         file_text = extract_text_from_file(file)
                         combined_content += f"\nFile Name: {file.name}\n{file_text}\n"
 
-                # OpenAI Client Initialization configured for OpenRouter
                 client = OpenAI(
                     api_key=api_key,
                     base_url=base_url
@@ -158,7 +157,6 @@ if analyze_button:
 
                 raw_output = response.choices[0].message.content.strip()
 
-                # Clean markdown backticks if returned
                 if raw_output.startswith("```json"):
                     raw_output = raw_output[7:]
                 if raw_output.startswith("```"):
@@ -171,7 +169,6 @@ if analyze_button:
                 st.success("విశ్లేషణ విజయవంతంగా పూర్తయింది!")
                 st.markdown(f"### 📂 నేరం వర్గం: `{report_data.get('complaint_category', 'General Offence')}`")
 
-                # Layout tabs for organized review
                 tab1, tab2, tab3, tab4, tab5 = st.tabs([
                     "📌 ముఖ్య వాస్తవాలు (Facts)",
                     "⚖️ వర్తించే సెక్షన్లు (Sections)",
@@ -207,7 +204,7 @@ if analyze_button:
                     st.markdown("---")
                     st.markdown(f"**2. హాజరు నోటీసు / అరెస్ట్ (Section 35 BNSS):**\n\n{bnss.get('notice_or_arrest')}")
                     st.markdown("---")
-                    st.markdown(f"**3. డిఫాల్ట్ బెయిల్ / నిర్బంధ పరిమిති (Section 187(3) BNSS):**\n\n{bnss.get('detention_default_bail_timeline')}")
+                    st.markdown(f"**3. డిఫాల్ట్ బెయిల్ / నిర్బంధ పరిమితి (Section 187(3) BNSS):**\n\n{bnss.get('detention_default_bail_timeline')}")
                     st.markdown("---")
                     st.markdown(f"**4. బాధితునికి పురోగతి నివేదిక (Section 193(3)(ii) BNSS):**\n\n{bnss.get('victim_update_rule')}")
 
