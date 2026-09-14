@@ -1,6 +1,8 @@
-import streamlit as st
-import json
+import os
 from openai import OpenAI
+from io import BytesIO
+from PIL import Image
+import PyPDF2
 
 # Page Config
 st.set_page_config(
@@ -18,16 +20,39 @@ api_key = None
 try:
     api_key = st.secrets["OPENROUTER_API_KEY"]
 except Exception:
-    import os
     api_key = os.environ.get("OPENROUTER_API_KEY")
 
 base_url = "https://openrouter.ai/api/v1"
+
+# Helper function to extract text from uploaded files (PDF, Images, TXT)
+def extract_text_from_file(uploaded_file):
+    file_extension = uploaded_file.name.split('.')[-1].lower()
+    extracted_text = ""
+    
+    try:
+        if file_extension == 'pdf':
+            pdf_reader = PyPDF2.PdfReader(BytesIO(uploaded_file.read()))
+            for page in pdf_reader.pages:
+                text = page.extract_text()
+                if text:
+                    extracted_text += text + "\n"
+        elif file_extension in ['jpg', 'jpeg', 'png']:
+            # For images/screenshots, we inform the model via text that an image was attached 
+            # (or we can extract basic details if needed). Here we append a notice.
+            img = Image.open(uploaded_file)
+            extracted_text = f"[Attached Image File: {uploaded_file.name} of size {img.size}]\n"
+        elif file_extension in ['txt', 'doc', 'docx']:
+            extracted_text = uploaded_file.read().decode('utf-8', errors='ignore')
+    except Exception as e:
+        extracted_text = f"[Error reading file {uploaded_file.name}: {str(e)}]"
+        
+    return extracted_text
 
 # System Prompt with Strict Legal Guardrails
 SYSTEM_PROMPT = """
 Role: You are an authoritative Indian Criminal Law Decision-Engine specialized in Bharatiya Nyaya Sanhita (BNS, 2023), Bharatiya Nagarik Suraksha Sanhita (BNSS, 2023), Bharatiya Sakshya Adhiniyam (BSA, 2023), and Special Acts (such as IT Act, 2000).
 
-Task: Analyze the user complaint (any crime type: Cyber/Financial Fraud, Assault/Bodily Harm, Property Damage/Theft, Threats/Criminal Intimidation, Women/Child Safety, Breach of Trust, etc.) and extract strict statutory sections, procedural guidelines, evidence rules, and IO action checklists.
+Task: Analyze the user complaint and uploaded document contents (any crime type: Cyber/Financial Fraud, Assault/Bodily Harm, Property Damage/Theft, Threats/Criminal Intimidation, Women/Child Safety, Breach_of_Trust, etc.) and extract strict statutory sections, procedural guidelines, evidence rules, and IO action checklists.
 
 Strict Legal Guardrails:
 1. Strict Ingredient Matching:
@@ -46,7 +71,7 @@ Strict Legal Guardrails:
    - Section 193 BNSS: Final report must be submitted without unnecessary delay, and progress must be reported to the informant every 90 days under Sec 193(3)(ii).
 
 3. BSA Evidence Compliance:
-   - Section 63(4) BSA: Require prescribed certification from the responsible person/entity in charge of the computer/device or management for any electronic evidence (not generalized to bank/telecom only).
+   - Section 63(4) BSA: Require prescribed certification from the responsible person/entity in charge of the computer/device or management for any electronic evidence.
    - Section 105 BNSS: Mandatory audio-video electronic recording during search and seizure.
    - Section 176(3) BNSS: Mandatory crime scene forensic visit for offences punishable with 7+ years, subject to state notification framework.
 
@@ -80,11 +105,18 @@ You MUST respond with a single, pure JSON object (no introductory text, no conve
 }
 """
 
-# Input Area
+# Input Area for Text Complaint
 user_complaint = st.text_area(
-    "ఫిర్యాదు వివరాలను నమోదు చేయండి (Complaint Text in Telugu / English):",
-    placeholder="ఉదాహరణ: సైబర్ మోసం, శారీరక దాడి, బెదిరింపులు, ఆస్తి వివాదం లేదా దొంగతనం వంటి ఏదైనా నేర ఫిర్యాదు పాఠ్యాన్ని ఇక్కడ పేస్ట్ చేయండి...",
-    height=200
+    "ఫిర్యాదు వివరాలను టైప్ చేయండి (Complaint Text):",
+    placeholder="ఉదాహరణ: సైబర్ మోసం, శారీరక దాడి, బెదిరింపులు లేదా దొంగతనం వివరాలు...",
+    height=150
+)
+
+# File Uploader for PDF, JPG, PNG, Screenshots
+uploaded_files = st.file_uploader(
+    "సంబంధిత డాక్యుమెంట్లు, PDFలు, స్క్రీన్‌షాట్లు లేదా ఇమేజ్‌లను అప్‌లోడ్ చేయండి (Multiple files allowed):",
+    type=["pdf", "jpg", "jpeg", "png", "txt"],
+    accept_multiple_files=True
 )
 
 col_btn, _ = st.columns([1, 4])
@@ -93,12 +125,21 @@ with col_btn:
 
 if analyze_button:
     if not api_key:
-        st.error("API కీ కనుగొనబడలేదు. దయచేసి Streamlit Secrets (`.streamlit/secrets.toml`) లో `OPENROUTER_API_KEY` ని కాన్ఫిగర్ చేయండి.")
-    elif not user_complaint.strip():
-        st.warning("దయచేసి విశ్లేషణ కోసం ఫిర్యాదు వివరాలను నమోదు చేయండి.")
+        st.error("API కీ కనుగొనబడలేదు. దయచేసి Streamlit Secrets లో `OPENROUTER_API_KEY` ని కాన్ఫిగర్ చేయండి.")
+    elif not user_complaint.strip() and not uploaded_files:
+        st.warning("దయచేసి ఫిర్యాదు పాఠ్యాన్ని నమోదు చేయండి లేదా ఏదైనా డాక్యుమెంట్/స్క్రీన్‌షాట్ అప్‌లోడ్ చేయండి.")
     else:
-        with st.spinner("openai/gpt-oss-120b మోడల్ ద్వారా సమగ్ర చట్టపరమైన విశ్లేషణ జరుగుతోంది..."):
+        with st.spinner("ఫిర్యాదు మరియు అప్‌లోడ్ చేసిన డాక్యుమెంట్లను విశ్లేషిస్తోంది..."):
             try:
+                # Combine user text and extracted text from uploaded documents
+                combined_content = f"User Complaint Text:\n{user_complaint}\n\n"
+                
+                if uploaded_files:
+                    combined_content += "--- Attached Documents / Files Content ---\n"
+                    for file in uploaded_files:
+                        file_text = extract_text_from_file(file)
+                        combined_content += f"\nFile Name: {file.name}\n{file_text}\n"
+
                 # OpenAI Client Initialization configured for OpenRouter
                 client = OpenAI(
                     api_key=api_key,
@@ -109,7 +150,7 @@ if analyze_button:
                     model="openai/gpt-oss-120b",
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": f"Analyze this complaint and produce the specified JSON report:\n\n{user_complaint}"}
+                        {"role": "user", "content": f"Analyze this complaint and attached documents, then produce the specified JSON report:\n\n{combined_content}"}
                     ],
                     temperature=0.1,
                     response_format={"type": "json_object"}
@@ -140,7 +181,7 @@ if analyze_button:
                 ])
 
                 with tab1:
-                    st.subheader("ఫిర్యాదు నుండి సేకరించిన ప్రాథమిక అంశాలు")
+                    st.subheader("ఫిర్యాదు & డాక్యుమెంట్ల నుండి సేకరించిన ప్రాథమిక అంశాలు")
                     for fact in report_data.get("key_facts", []):
                         st.markdown(f"* {fact}")
 
