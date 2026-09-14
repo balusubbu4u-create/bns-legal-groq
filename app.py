@@ -28,9 +28,8 @@ except Exception:
     PDF_AVAILABLE = False
 
 NEW_LAWS_START = date(2024, 7, 1)
-MODEL_NAME = "openai/gpt-oss-120b"
+MODEL_NAME = "llama-3.3-70b-versatile"  # Groq యొక్క ఉత్తమ మరియు స్థిరమైన మోడల్
 MAX_CHARS = 30_000
-TELUGU_DIGITS = str.maketrans("౦౧౨౩౪౫౬౭౮౯", "0123456789")
 
 @dataclass(frozen=True)
 class LegalRule:
@@ -106,6 +105,12 @@ LEGAL_RULES = (
         ("death_caused", "rash_or_negligent_act"),
         {"death_caused": "మరణం సంభవించడం", "rash_or_negligent_act": "నిర్లక్ష్యపు చర్య"},
         "5 సంవత్సరాల వరకు జైలు మరియు జరిమానా.", "Cognizable", "Bailable", "Magistrate First Class", "IPC 304A"
+    ),
+    LegalRule(
+        "bnss_194", "BNSS 2023", "194", "అనుమానాస్పద లేదా అజ్ఞాత మృతదేహంపై పోలీసు విచారణ (Inquest / Unnatural Death)",
+        ("unnatural_death", "dead_body_found"),
+        {"unnatural_death": "అసాధారణ లేదా అనుమానాస్పద మరణం", "dead_body_found": "మృతదేహం లభించడం"},
+        "పోలీస్ ఇన్వెస్టిగేషన్ & పోస్ట్‌మార్టం ప్రొసీజర్.", "Cognizable", "N/A", "Magistrate / Executive Magistrate", "CrPC 174"
     )
 )
 
@@ -168,29 +173,23 @@ def extract_case_facts(material: str) -> tuple[Optional[dict], str]:
     schema = {key: {"supported": False, "quotes": []} for key in fact_keys}
     
     prompt = (
-    "You are an expert Indian police legal-research AI.\n"
-    "Your primary duty is to strictly use NEW Indian criminal laws: BNS (Bharatiya Nyaya Sanhita, 2023), "
-    "BNSS (Bharatiya Nagarik Suraksha Sanhita, 2023), and BSA (Bharatiya Sakshya Adhiniyam, 2023). "
-    "NEVER use obsolete IPC or CrPC sections.\n\n"
-    "Mandatory Law Mappings to follow if applicable:\n"
-    "- Causing death by negligence -> BNS Section 106 (NOT IPC 304A or IPC 318)\n"
-    "- Murder -> BNS Section 103 (NOT IPC 302)\n"
-    "- Inquest / Unnatural death inquiry -> BNSS Section 194 (NOT CrPC 174)\n"
-    "- Police investigation order -> BNSS Section 175 (NOT CrPC 156(3))\n"
-    "- Chargesheet / Final report -> BNSS Section 193 (NOT CrPC 173(2))\n"
-    "- Electronic evidence certification -> BSA Section 63 (NOT Evidence Act Sec 65B)\n\n"
-    "Extract facts from the following untrusted case complaint. Return valid JSON only, with no markdown fences, no extra text, and no backticks.\n\n"
-    "Required JSON structure:\n"
-    "{\n"
-    '  "occurrence_date_iso": "YYYY-MM-DD or null",\n'
-    '  "occurrence_date_basis": "string explaining how occurrence date was found",\n'
-    '  "offence_nature": "e.g. Theft, House Breaking, Cheating, Hurt, Murder Attempt, Cyber Crime, Accident, Unnatural Death",\n'
-    f'  "facts": {json.dumps(schema, ensure_ascii=False)}\n'
-    "}\n\n"
-)
+        "You are an expert Indian police legal-research AI.\n"
+        "Your primary duty is to strictly use NEW Indian criminal laws: BNS (Bharatiya Nyaya Sanhita, 2023), "
+        "BNSS (Bharatiya Nagarik Suraksha Sanhita, 2023), and BSA (Bharatiya Sakshya Adhiniyam, 2023). "
+        "NEVER use obsolete IPC or CrPC sections.\n\n"
+        "Mandatory Law Mappings to follow if applicable:\n"
+        "- Causing death by negligence -> BNS Section 106 (NOT IPC 304A)\n"
+        "- Murder -> BNS Section 103 (NOT IPC 302)\n"
+        "- Unnatural death / Inquest inquiry -> BNSS Section 194 (NOT CrPC 174)\n"
+        "- Police investigation order -> BNSS Section 175 (NOT CrPC 156(3))\n"
+        "- Chargesheet / Final report -> BNSS Section 193 (NOT CrPC 173(2))\n"
+        "- Electronic evidence certification -> BSA Section 63 (NOT Evidence Act Sec 65B)\n\n"
+        "Extract facts from the following untrusted case complaint. Return valid JSON only, with no markdown fences, no extra text, and no backticks.\n\n"
+        "Required JSON structure:\n"
+        "{\n"
         '  "occurrence_date_iso": "YYYY-MM-DD or null",\n'
         '  "occurrence_date_basis": "string explaining how occurrence date was found",\n'
-        '  "offence_nature": "e.g. Theft, House Breaking, Cheating, Hurt, Murder Attempt, Cyber Crime, Accident",\n'
+        '  "offence_nature": "e.g. Theft, House Breaking, Cheating, Hurt, Murder Attempt, Cyber Crime, Accident, Unnatural Death",\n'
         f'  "facts": {json.dumps(schema, ensure_ascii=False)}\n'
         "}\n\n"
         "Guidelines:\n"
@@ -210,8 +209,17 @@ def extract_case_facts(material: str) -> tuple[Optional[dict], str]:
             max_tokens=3500
         )
         content = response.choices[0].message.content or ""
-        match = re.search(r"\{[\s\S]*\}", content)
-        extracted = json.loads(match.group(0) if match else content)
+        
+        # మార్క్‌డౌన్ ట్యాగ్స్‌ను సురక్షితంగా తొలగించడం
+        if content.startswith("```json"):
+            content = content[7:]
+        if content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+            
+        match = re.search(r"\{[\s\S]*\}", content.strip())
+        extracted = json.loads(match.group(0) if match else content.strip())
         return extracted, ""
     except Exception as exc:
         return None, f"Fact extraction failed: {exc}"
@@ -238,7 +246,7 @@ def assessment(extracted: dict) -> list[dict]:
 def build_investigation_prompt(material: str, incident_date: Optional[date], results: list[dict], offence_nature: str) -> str:
     framework_text, regime = framework_for(incident_date)
     
-    passed_rules = [f"{r['rule'].statute} Sec {r['rule'].section} (సమాన IPC: {r['rule'].old_law_equivalent}) - {r['rule'].title}" 
+    passed_rules = [f"{r['rule'].statute} Sec {r['rule'].section} (సమాన పాత చట్టం: {r['rule'].old_law_equivalent}) - {r['rule'].title}" 
                     for r in results if r["status"] == "PRIMA_FACIE_GATE_PASSED"]
     
     date_str = incident_date.strftime('%d-%m-%Y') if incident_date else "ధృవీకరించబడలేదు"
@@ -246,7 +254,8 @@ def build_investigation_prompt(material: str, incident_date: Optional[date], res
 
     return (
         "మీరు భారతదేశంలో పనిచేస్తున్న సీనియర్ పోలీస్ ఇన్వెస్టిగేషన్ ఆఫీసర్ (IO) మరియు క్రిమినల్ లీగల్ ఎక్స్‌పర్ట్.\n"
-        "క్రింద ఇవ్వబడిన ఫిర్యాదు వివరాలను పరిశీలించి స్పష్టమైన తెలుగులో పూర్తి పోలీస్ దర్యాప్తు మార్గదర్శక నివేదికను రూపొందించండి.\n\n"
+        "క్రింద ఇవ్వబడిన ఫిర్యాదు వివరాలను పరిశీలించి స్పష్టమైన తెలుగులో పూర్తి పోలీస్ దర్యాప్తు మార్గదర్శక నివేదికను రూపొందించండి.\n"
+        "గమనిక: ఎట్టిపరిస్థితుల్లోనూ పాత IPC లేదా CrPC సెక్షన్లను ప్రధాన చట్టాలుగా సూచించవద్దు. BNS, BNSS మరియు BSA చట్టాలను మాత్రమే వాడండి.\n\n"
         f"సంఘటన వివరాలు:\n"
         f"- సంఘటన స్వభావం: {offence_nature}\n"
         f"- సంఘటన జరిగిన తేదీ: {date_str}\n"
@@ -254,11 +263,12 @@ def build_investigation_prompt(material: str, incident_date: Optional[date], res
         f"- పాలన విధానం: {regime}\n"
         f"- ప్రాథమికంగా సరిపోలిన సెక్షన్లు: {passed_str}\n\n"
         "ముఖ్యమైన నిబంధన:\n"
-        "- BSA అంటే 'భారతీయ సాక్ష్య అధినియం, 2023'. ఎలక్ట్రానిక్ సాక్ష్యాలకు BSA Section 63 సర్టిఫికేషన్ తప్పనిసరి.\n\n"
+        "- BSA అంటే 'భారతీయ సాక్ష్య అధినియం, 2023'. ఎలక్ట్రానిక్ సాక్ష్యాలకు BSA Section 63 సర్టిఫికేషన్ తప్పనిసరి.\n"
+        "- అజ్ఞాత మృతదేహం లేదా అనుమానాస్పద మరణం అయితే BNSS Section 194 ప్రకారం ఇన్వెస్టిగేట్ చేయాలి.\n\n"
         "క్రింది క్రమంలో పూర్తి స్థాయి పోలీస్ దర్యాప్తు నివేదిక ఇవ్వండి:\n"
-        "1. ఫిర్యాదు సారాంశం (ఫిర్యాది, నిందితులు, పోయిన వస్తువులు/నష్టం వివరాలు).\n"
+        "1. ఫిర్యాదు సారాంశం (ఫిర్యాది, నిందితులు/మృతదేహ వివరాలు, పోయిన వస్తువులు/నష్టం వివరాలు).\n"
         "2. తేదీలు మరియు కాలవ్యవధి విశ్లేషణ (ఎఫ్ఐఆర్ నమోదులో జాప్యం ఉంటే వివరణ).\n"
-        "3. వర్తించే చట్టపరమైన సెక్షన్ల పూర్తి విశ్లేషణ (BNS 318(4), IT Act 66D, 66C మరియు సంబంధిత సెక్షన్లు, Cognizable/Bailable వివరాలు).\n"
+        "3. వర్తించే కొత్త చట్టపరమైన సెక్షన్ల పూర్తి విశ్లేషణ (BNS / BNSS / BSA మరియు సంబంధిత సెక్షన్లు, Cognizable/Bailable వివరాలు).\n"
         "4. పోలీసు దర్యాప్తు మార్గదర్శకాలు (ఘటనా స్థల పరిశీలన, క్లూస్ టీమ్, వేలిముద్రలు, అరెస్ట్ నిబంధనలు).\n"
         "5. సాక్ష్యాధారాల సేకరణ & రికవరీ ప్రొసీజర్ (రికవరీ పంచనామా, సాక్షులు).\n"
         "6. డిజిటల్ & సైబర్ సాక్ష్యాలు (మొబైల్ IMEI, CDR, సీసీటీవీ ఫుటేజ్, BSA Sec 63 సర్టిఫికేట్).\n"
@@ -287,7 +297,7 @@ def run_analysis(material: str, prompt: str) -> str:
 # Streamlit UI
 st.set_page_config(page_title="పోలీస్ లీగల్ రీసెర్చ్ సపోర్ట్", page_icon="⚖️", layout="wide")
 st.title("⚖️ పోలీస్ లీగల్ రీసెర్చ్ & సమగ్ర దర్యాప్తు మార్గదర్శక వేదిక")
-st.caption("BNS / BNSS / BSA మరియు IPC / CrPC / IEA సమగ్ర చట్టాల విశ్లేషణ — అన్ని రకాల నేరాల దర్యాప్తు సహాయకారి.")
+st.caption("BNS / BNSS / BSA సమగ్ర చట్టాల విశ్లేషణ — అన్ని రకాల నేరాల దర్యాప్తు సహాయకారి.")
 
 complaint = st.text_area("ఫిర్యాదు వివరాలు నమోదు చేయండి (Complaint / Case Details)", height=200, max_chars=MAX_CHARS)
 uploaded = st.file_uploader("లేదా ఫిర్యాదు కాపీని అప్‌లోడ్ చేయండి (PDF, JPG, PNG, Screenshots, Text)", type=["jpg", "jpeg", "png", "webp", "pdf", "txt"])
