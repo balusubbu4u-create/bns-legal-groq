@@ -1,6 +1,6 @@
-Police legal-research support tool.
-Upgraded with Property/Theft rules, proper Date-Framework routing,
-and structured BNS/BNSS/BSA & IPC/CrPC/IEA legal research guidelines.
+Comprehensive Police Legal Research & Investigation Support Tool.
+Supports all criminal offence categories under BNS, BNSS, BSA and IPC, CrPC, IEA.
+Handles PDF, JPG, PNG, and plain-text complaint sources.
 """
 import io
 import json
@@ -52,144 +52,115 @@ class LegalRule:
     ingredients: tuple[str, ...]
     fact_labels: dict[str, str]
     punishment: str
-    cognizable: Optional[str] = None
-    bailable: Optional[str] = None
-    court: Optional[str] = None
-    old_law_equivalent: str = ""
-    official_source: str = ""
+    cognizable: str
+    bailable: str
+    court: str
+    old_law_equivalent: str
     notes: str = ""
 
-BNS_SOURCE = "https://www.indiacode.nic.in/handle/123456789/20062"
-BNSS_SOURCE = "https://www.indiacode.nic.in/handle/123456789/20099"
-BSA_SOURCE = "https://www.indiacode.nic.in/handle/123456789/20063"
-IT_SOURCE = "https://www.indiacode.nic.in/handle/123456789/15442"
-RULESET_VERSION = "2026-09-14 / official-text baseline"
-
-CASE_HEADS = (
-    ("Theft_HouseBreaking", "Theft & House-Breaking / దొంగతనం & కన్నం వేయడం"),
-    ("Property", "Property Offences / ఆస్తి నేరాలు"),
-    ("Women", "Offences against Women / మహిళలపై నేరాలు"),
-    ("Children", "Offences against Children / బాలలపై నేరాలు (including POCSO)"),
-    ("Road", "Road Accidents & Motor-Vehicle Offences / రోడ్డు ప్రమాదాలు"),
-    ("Body", "Offences against Human Body / వ్యక్తిపై నేరాలు"),
-    ("Financial", "Cheating & Financial Fraud / మోసం మరియు ఆర్థిక నేరాలు"),
-    ("Cyber", "Cybercrime / సైబర్ నేరాలు"),
-    ("Arms", "Arms & Explosives / ఆయుధాలు మరియు పేలుడు పదార్థాలు"),
-    ("Domestic", "Domestic Violence & Family Offences / కుటుంబ హింస"),
-)
-
-# విస్తరించిన లీగల్ రూల్స్ (Theft, House-breaking & Cheating)
+# అన్ని ప్రధాన నేరాల సమగ్ర రూల్స్ డేటాబేస్
 LEGAL_RULES = (
+    # --- దొంగతనం & ఆస్తి నేరాలు ---
     LegalRule(
-        "bns_303_2", "BNS 2023", "303(2)", "Theft (సాధారణ దొంగతనం)",
+        "bns_303_2", "BNS 2023", "303(2)", "సాధారణ దొంగతనం (Theft)",
         ("dishonest_intention", "movable_property", "taken_without_consent"),
-        {
-            "dishonest_intention": "Dishonest intention to take movable property is established",
-            "movable_property": "Movable property is involved (gold, cash, mobile, etc.)",
-            "taken_without_consent": "Property moved/taken out of possession without person's consent"
-        },
-        "Up to 3 years, or fine, or both.", "Cognizable", "Non-bailable", "Any Magistrate",
-        "IPC 379", BNS_SOURCE, "Simple theft of movable property."
+        {"dishonest_intention": "దురుద్దేశం ధృవీకరించబడింది", "movable_property": "చరాస్తి (బంగారం, నగదు, మొబైల్ మొదలైనవి)", "taken_without_consent": "సమ్మతి లేకుండా తీసుకున్నారు"},
+        "3 సంవత్సరాల వరకు జైలు, లేదా జరిమానా, లేదా రెండూ.", "Cognizable", "Non-bailable", "Any Magistrate", "IPC 379"
     ),
     LegalRule(
-        "bns_305", "BNS 2023", "305", "Theft in dwelling house, etc. (నివాస గృహంలో దొంగతనం)",
-        ("dishonest_intention", "movable_property", "taken_without_consent", "dwelling_house_or_building"),
-        {
-            "dishonest_intention": "Dishonest intention to take property",
-            "movable_property": "Movable property is involved",
-            "taken_without_consent": "Taken without consent",
-            "dwelling_house_or_building": "Theft committed in any building, tent or vessel used as human dwelling or custody of property"
-        },
-        "Up to 7 years and fine.", "Cognizable", "Non-bailable", "Magistrate of the First Class",
-        "IPC 380", BNS_SOURCE, "Theft inside residence/house."
+        "bns_305", "BNS 2023", "305", "నివాస గృహంలో దొంగతనం (Theft in dwelling house)",
+        ("dishonest_intention", "movable_property", "taken_without_consent", "dwelling_house"),
+        {"dishonest_intention": "దురుద్దేశం ధృవీకరించబడింది", "movable_property": "చరాస్తి ఉంది", "taken_without_consent": "సమ్మతి లేకుండా తీసుకున్నారు", "dwelling_house": "నివాస గృహం/భవనంలో జరిగింది"},
+        "7 సంవత్సరాల వరకు జైలు మరియు జరిమానా.", "Cognizable", "Non-bailable", "Magistrate First Class", "IPC 380"
     ),
     LegalRule(
-        "bns_331_3", "BNS 2023", "331(3)", "Lurking house-trespass or house-breaking by night (రాత్రివేళ ఇంటిలోకి చొరబడటం/కన్నం వేయడం)",
-        ("house_trespass", "by_night_or_concealment"),
-        {
-            "house_trespass": "House trespass or breaking open door/lock/bolt is verified",
-            "by_night_or_concealment": "Committed after sunset and before sunrise, or having taken precautions of concealment"
-        },
-        "Up to 3 years and fine.", "Cognizable", "Non-bailable", "Any Magistrate",
-        "IPC 456 / 457", BNS_SOURCE, "Entering dwelling house surreptitiously or by force at night."
+        "bns_331_4", "BNS 2023", "331(4)", "రాత్రివేళ తాళాలు తీసి/కన్నం వేసి దొంగతనానికి చొరబడటం (House-breaking by night)",
+        ("house_trespass", "by_night", "intent_to_theft"),
+        {"house_trespass": "తలుపు తీయడం లేదా గృహ ప్రవేశం", "by_night": "రాత్రివేళ జరిగింది (సూర్యాస్తమయం తర్వాత)", "intent_to_theft": "దొంగతనం చేయాలనే ఉద్దేశం"},
+        "14 సంవత్సరాల వరకు జైలు మరియు జరిమానా.", "Cognizable", "Non-bailable", "Magistrate First Class", "IPC 457"
+    ),
+    # --- మోసం మరియు ఆర్థిక నేరాలు ---
+    LegalRule(
+        "bns_318_4", "BNS 2023", "318(4)", "మోసగించి ఆస్తి డెలివరీ చేయించడం (Cheating)",
+        ("deception", "fraudulent_inducement", "property_delivered"),
+        {"deception": "వంచన/మోసం రుజువైంది", "fraudulent_inducement": "తప్పుడు వాగ్దానంతో ప్రేరేపించడం", "property_delivered": "డబ్బు/ఆస్తి ఇప్పించుకోవడం"},
+        "7 సంవత్సరాల వరకు జైలు మరియు జరిమానా.", "Cognizable", "Non-bailable", "Magistrate First Class", "IPC 420"
+    ),
+    # --- శరీరానికి వ్యతిరేక నేరాలు (శారీరక దాడులు & గాయాలు) ---
+    LegalRule(
+        "bns_115_2", "BNS 2023", "115(2)", "స్వచ్ఛందంగా గాయపరచడం (Voluntarily causing hurt)",
+        ("causing_hurt", "intentional_act"),
+        {"causing_hurt": "శారీరక నొప్పి లేదా గాయం జరిగింది", "intentional_act": "ఉద్దేశపూర్వకంగా గాయం చేయడం"},
+        "1 సంవత్సరం వరకు జైలు, లేదా 10,000 వరకు జరిమానా, లేదా రెండూ.", "Non-cognizable", "Bailable", "Any Magistrate", "IPC 323"
     ),
     LegalRule(
-        "bns_331_4", "BNS 2023", "331(4)", "House-breaking by night in order to commit offence (దొంగతనం కోసం రాత్రివేళ తాళాలు తీసి చొరబడటం)",
-        ("house_trespass", "by_night_or_concealment", "intent_to_commit_theft"),
-        {
-            "house_trespass": "House trespass or house-breaking (e.g. back door bolt opened)",
-            "by_night_or_concealment": "Committed by night",
-            "intent_to_commit_theft": "Committed in order to the committing of any offence punishable with imprisonment (Theft)"
-        },
-        "Up to 14 years and fine (if theft).", "Cognizable", "Non-bailable", "Magistrate of the First Class",
-        "IPC 457", BNS_SOURCE, "Lurking house-trespass/house-breaking by night with intent to commit theft."
+        "bns_117_2", "BNS 2023", "117(2)", "తీవ్రమైన గాయం కలిగించడం (Grievous hurt)",
+        ("grievous_hurt", "intentional_act"),
+        {"grievous_hurt": "ఎముకల విరుపు, తీవ్ర గాయం, ప్రాణాపాయ స్థితి", "intentional_act": "ఉద్దేశపూర్వక చర్య"},
+        "7 సంవత్సరాల వరకు జైలు మరియు జరిమానా.", "Cognizable", "Bailable", "Any Magistrate", "IPC 325"
     ),
     LegalRule(
-        "bns_318_4", "BNS 2023", "318(4)", "Cheating & dishonestly inducing delivery of property",
-        ("deception", "fraudulent_or_dishonest_inducement", "delivery_of_property_or_valuable_security"),
-        {
-            "deception": "A specific deception is verified",
-            "fraudulent_or_dishonest_inducement": "Facts support fraudulent/dishonest inducement",
-            "delivery_of_property_or_valuable_security": "Delivery of property induced"
-        },
-        "Up to 7 years and fine.", "Cognizable", "Non-bailable", "Magistrate of the First Class",
-        "IPC 420", BNS_SOURCE, "Cheating with delivery of property."
+        "bns_109", "BNS 2023", "109", "హత్యాయత్నం (Attempt to Murder)",
+        ("act_done_with_intent", "capability_to_cause_death"),
+        {"act_done_with_intent": "హత్య చేయాలనే ఉద్దేశంతో దాడి చేయడం", "capability_to_cause_death": "ప్రాణం పోయే అవకాశం ఉన్న చర్య"},
+        "10 సంవత్సరాల వరకు జైలు మరియు జరిమానా (గాయమైతే జీవితఖైదు వరకు).", "Cognizable", "Non-bailable", "Court of Session", "IPC 307"
+    ),
+    # --- మహిళలపై నేరాలు ---
+    LegalRule(
+        "bns_85", "BNS 2023", "85", "భర్త లేదా బంధువులచే క్రూరత్వం (Cruelty by husband or relatives)",
+        ("woman_subjected_to_cruelty", "harassment_for_dowry_or_coercion"),
+        {"woman_subjected_to_cruelty": "వివాహిత స్త్రీని శారీరకంగా/మానసికంగా వేధించడం", "harassment_for_dowry_or_coercion": "వరకట్నం లేదా అక్రమ డిమాండ్ల కోసం వేధింపులు"},
+        "3 సంవత్సరాల వరకు జైలు మరియు జరిమానా.", "Cognizable", "Non-bailable", "Magistrate First Class", "IPC 498A"
     ),
     LegalRule(
-        "it_66c", "IT Act 2000", "66C", "Identity theft (గుర్తింపు చోరీ / పాస్‌వర్డ్ / సిమ్ దుర్వినియోగం)",
-        ("fraudulent_or_dishonest_use", "electronic_identifier_used"),
-        {
-            "fraudulent_or_dishonest_use": "Fraudulent or dishonest use is verified",
-            "electronic_identifier_used": "Another person's electronic signature, password, SIM/unique identity used"
-        },
-        "Up to 3 years and fine up to 1 lakh.", "Cognizable", "Bailable", "Magistrate First Class",
-        "IT Act 66C", IT_SOURCE, "Digital identity/credential theft."
+        "bns_74", "BNS 2023", "74", "స్త్రీ గౌరవానికి భంగం కలిగించేలా బలప్రయోగం (Outraging modesty of woman)",
+        ("assault_or_force_on_woman", "intent_to_outrage_modesty"),
+        {"assault_or_force_on_woman": "మహిళపై బలప్రయోగం లేదా దాడి", "intent_to_outrage_modesty": "ఆమె గౌరవానికి భంగం కలిగించే ఉద్దేశం"},
+        "1 నుండి 5 సంవత్సరాల వరకు జైలు మరియు జరిమానా.", "Cognizable", "Non-bailable", "Any Magistrate", "IPC 354"
+    ),
+    # --- సైబర్ నేరాలు ---
+    LegalRule(
+        "it_66c", "IT Act 2000", "66C", "గుర్తింపు చోరీ / పాస్‌వర్డ్ దుర్వినియోగం (Identity Theft)",
+        ("fraudulent_use", "electronic_identifier"),
+        {"fraudulent_use": "దురుద్దేశపూర్వకంగా ఉపయోగించడం", "electronic_identifier": "మరొకరి పాస్‌వర్డ్, సిమ్, ఓటీపీ, లేదా డిజిటల్ సిగ్నేచర్"},
+        "3 సంవత్సరాల వరకు జైలు మరియు 1 లక్ష వరకు జరిమానా.", "Cognizable", "Bailable", "Magistrate First Class", "IT Act 66C"
+    ),
+    LegalRule(
+        "it_66d", "IT Act 2000", "66D", "కంప్యూటర్ వనరుల ద్వారా వ్యక్తిగత మారువేషంలో మోసం (Cheating by personation using computer)",
+        ("cheating_by_personation", "computer_device_used"),
+        {"cheating_by_personation": "మరొకరిగా నటించి మోసం చేయడం", "computer_device_used": "మొబైల్ ఫోన్, ఇంటర్నెట్ లేదా కంప్యూటర్ ద్వారా"},
+        "3 సంవత్సరాల వరకు జైలు మరియు 1 లక్ష వరకు జరిమానా.", "Cognizable", "Bailable", "Magistrate First Class", "IT Act 66D"
+    ),
+    # --- రోడ్డు ప్రమాదాలు ---
+    LegalRule(
+        "bns_281", "BNS 2023", "281", "ప్రజా రహదారిపై నిర్లక్ష్యపు డ్రైవింగ్ (Rash driving on a public way)",
+        ("driving_on_public_way", "rash_or_negligent_manner"),
+        {"driving_on_public_way": "ప్రజా రహదారిపై వాహనం నడపడం", "rash_or_negligent_manner": "ప్రజల ప్రాణాలకు ముప్పు కలిగించే నిర్లక్ష్యం"},
+        "6 నెలల వరకు జైలు, లేదా 1,000 జరిమానా, లేదా రెండూ.", "Cognizable", "Bailable", "Any Magistrate", "IPC 279"
+    ),
+    LegalRule(
+        "bns_106_1", "BNS 2023", "106(1)", "నిర్లక్ష్యం వల్ల మరణం సంభవించడం (Causing death by negligence)",
+        ("death_caused", "rash_or_negligent_act"),
+        {"death_caused": "వ్యక్తి మరణం సంభవించడం", "rash_or_negligent_act": "నిర్లక్ష్యపు చర్య (రోడ్డు ప్రమాదం మొదలైనవి)"},
+        "5 సంవత్సరాల వరకు జైలు మరియు జరిమానా.", "Cognizable", "Bailable", "Magistrate First Class", "IPC 304A"
     )
 )
 
 def framework_for(incident_date: Optional[date]) -> tuple[str, str]:
     if incident_date is None:
         return (
-            "సంఘటన తేదీ ధృవీకరించబడలేదు — వర్తించే చట్టపరమైన ఫ్రేమ్‌వర్క్ పరిశీలనలో ఉంది.",
+            "సంఘటన తేదీ నిర్ధారించబడలేదు. అందువల్ల BNS మరియు IPC రెండింటి సమగ్ర పరిశీలన అవసరం.",
             "BOTH"
         )
     if incident_date >= NEW_LAWS_START:
         return (
-            f"01-07-2024 తర్వాతి సంఘటన ({incident_date.strftime('%d-%m-%Y')}) -> వర్తించే చట్టాలు: BNS, 2023 + BNSS, 2023 + BSA, 2023.",
+            f"01-07-2024 తర్వాత జరిగిన సంఘటన ({incident_date.strftime('%d-%m-%Y')}). వర్తించే చట్టాలు: BNS, 2023 + BNSS, 2023 + BSA, 2023.",
             "NEW"
         )
     return (
-        f"01-07-2024 ముందరి సంఘటన ({incident_date.strftime('%d-%m-%Y')}) -> నిబంధనల ప్రకారం ప్రాథమికంగా IPC + CrPC + Indian Evidence Act వర్తిస్తాయి (పరిశీలనార్థం BNS/BNSS సమాన సెక్షన్లు ఇవ్వబడతాయి).",
+        f"01-07-2024 కు ముందు జరిగిన సంఘటన ({incident_date.strftime('%d-%m-%Y')}). వర్తించే చట్టాలు: IPC + CrPC + Indian Evidence Act (పరిశీలనార్థం BNS సమాన సెక్షన్లు కూడా ఇవ్వబడతాయి).",
         "OLD"
     )
-
-def _valid_date(year: int, month: int, day: int) -> Optional[date]:
-    try:
-        return date(year, month, day)
-    except ValueError:
-        return None
-
-def find_date_candidates(text: str, reference: date) -> list[tuple[date, str]]:
-    text = (text or "").translate(TELUGU_DIGITS)
-    found: list[tuple[date, str]] = []
-    for matched in re.finditer(r"\b(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{4})\b", text):
-        value = matched.group(0)
-        parts = [int(x) for x in re.split(r"[-/.]", value)]
-        parsed = _valid_date(*parts) if len(str(parts[0])) == 4 else _valid_date(parts[2], parts[1], parts[0])
-        if parsed:
-            found.append((parsed, f"Explicit date: {value}"))
-    names = {**ENGLISH_MONTHS, **TELUGU_MONTHS}
-    choices = "|".join(re.escape(x) for x in sorted(names, key=len, reverse=True))
-    for pattern, month_first in ((rf"(?<!\d)(\d{{1,2}})\s+({choices})\s*,?\s*(\d{{4}})(?!\d)", False),
-                                 (rf"({choices})\s+(\d{{1,2}})\s*,?\s*(\d{{4}})(?!\d)", True)):
-        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
-            a, b, year = match.groups()
-            month_name, day = (a, b) if month_first else (b, a)
-            month = names.get(month_name.lower()) or names.get(month_name)
-            parsed = _valid_date(int(year), month, int(day)) if month else None
-            if parsed:
-                found.append((parsed, f"Explicit named-month date: {match.group(0)}"))
-    return found
 
 def text_limit(value: str) -> str:
     return value[:MAX_CHARS] + "\n[Truncated by application.]" if len(value) > MAX_CHARS else value
@@ -203,10 +174,10 @@ def extract_upload(uploaded) -> tuple[str, str]:
             if not PDF_AVAILABLE:
                 return "", "PDF text extraction is unavailable (install pypdf)."
             result = "\n".join(page.extract_text() or "" for page in PdfReader(io.BytesIO(raw)).pages)
-            return (text_limit(result), "") if result.strip() else ("", "PDF has no selectable text.")
+            return (text_limit(result), "") if result.strip() else ("", "PDF లో టెక్స్ట్ లభించలేదు; OCR చిత్రం అప్‌లోడ్ చేయండి.")
         if name.endswith((".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff")):
             if not OCR_AVAILABLE:
-                return "", "OCR is unavailable (install pytesseract)."
+                return "", "OCR అందుబాటులో లేదు (pytesseract ఇన్‌స్టాల్ చేయండి)."
             image = Image.open(io.BytesIO(raw))
             for language in ("tel+eng", "eng"):
                 try:
@@ -215,32 +186,16 @@ def extract_upload(uploaded) -> tuple[str, str]:
                         return text_limit(result), ""
                 except Exception:
                     continue
-            return "", "OCR could not read this image."
+            return "", "చిత్రం నుండి టెక్స్ట్‌ను చదవలేకపోయాము."
         if name.endswith((".txt", ".csv", ".log")):
             for encoding in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
                 try:
                     return text_limit(raw.decode(encoding)), ""
                 except UnicodeDecodeError:
                     pass
-        return "", "Unsupported file type."
+        return "", "సపోర్ట్ చేయని ఫైల్ ఫార్మాట్."
     except Exception as exc:
-        return "", f"Extraction failed: {exc}"
-
-def rule_status(rule: LegalRule, facts: dict[str, bool]) -> tuple[str, list[str]]:
-    missing = [rule.fact_labels[k] for k in rule.ingredients if not facts.get(k, False)]
-    return ("PRIMA_FACIE_GATE_PASSED" if not missing else "REQUIRES_VERIFICATION", missing)
-
-def assessment(facts: dict[str, bool], incident_date: Optional[date]) -> list[dict]:
-    # 01-07-2024 ముందరైనా కాకపోయినా రూల్స్ ని అసెస్ చేసి పాత & కొత్త సెక్షన్లు రెండింటినీ చూపిస్తుంది
-    rows = []
-    for rule in LEGAL_RULES:
-        status, missing = rule_status(rule, facts)
-        rows.append({
-            "rule": rule,
-            "status": status,
-            "missing": missing
-        })
-    return rows
+        return "", f"ఫైల్ రీడింగ్ లోపం: {exc}"
 
 def groq_client() -> Optional[Groq]:
     try:
@@ -253,34 +208,34 @@ def groq_client() -> Optional[Groq]:
 def extract_case_facts(material: str) -> tuple[Optional[dict], str]:
     client = groq_client()
     if not client:
-        return None, "GROQ_API_KEY is not configured."
+        return None, "GROQ_API_KEY కాన్ఫిగర్ చేయబడలేదు."
+    
     fact_keys = {key: label for rule in LEGAL_RULES for key, label in rule.fact_labels.items()}
     schema = {key: {"supported": False, "quotes": []} for key in fact_keys}
-    prompt = f"""You are a precise legal fact-extractor for Indian criminal investigations.
-Extract facts from the untrusted material. Return JSON only, with no markdown.
+    
+    prompt = f"""You are an Indian police legal-research AI.
+Extract facts from the following untrusted case complaint. Return JSON only, with no markdown fences.
 
-Required JSON format:
+Required JSON structure:
 {{
   "occurrence_date_iso": "YYYY-MM-DD or null",
-  "occurrence_date_basis": "short note on date found",
-  "case_heads": [{{"head": "head_key", "quotes": ["quote"]}}],
-  "facts": {json.dumps(schema, ensure_ascii=False)},
-  "missing_or_ambiguous": []
+  "occurrence_date_basis": "string explaining how occurrence date was found",
+  "offence_nature": "e.g. Theft, House Breaking, Cheating, Hurt, Murder Attempt, Cyber Crime, Accident",
+  "facts": {json.dumps(schema, ensure_ascii=False)}
 }}
 
-Rules:
-- Mark a fact true only if supported by the text directly or by prima-facie inference. Provide verbatim quotes.
-- Date must be the incident occurrence date (not FIR date).
-- If gold, money, mobile taken: mark movable_property=true, dishonest_intention=true, taken_without_consent=true.
-- If house back door/lock opened: dwelling_house_or_building=true, house_trespass=true.
-- If between 11 PM and 6 AM: by_night_or_concealment=true.
+Guidelines:
+- If incident date is stated (e.g. 28-05-2017), convert to YYYY-MM-DD. Distinguish occurrence date from complaint filing date.
+- Set fact `supported: true` if directly stated or prima-facie inferred from the text, and provide verbatim quote in `quotes`.
+- If gold, mobile, money, or goods are stolen: mark movable_property, dishonest_intention, taken_without_consent as true.
+- If door broken or back bolt opened at night: dwelling_house, house_trespass, by_night as true.
 
-Fact definitions: {json.dumps(fact_keys, ensure_ascii=False)}
-Allowed case heads: {json.dumps(dict(CASE_HEADS), ensure_ascii=False)}
+Fact keys to check: {json.dumps(fact_keys, ensure_ascii=False)}
 
 <CASE_MATERIAL>
 {material}
 </CASE_MATERIAL>"""
+
     try:
         response = client.chat.completions.create(
             model=MODEL_NAME,
@@ -295,74 +250,67 @@ Allowed case heads: {json.dumps(dict(CASE_HEADS), ensure_ascii=False)}
     except Exception as exc:
         return None, f"Fact extraction failed: {exc}"
 
-def cited_facts(extracted: dict) -> tuple[dict[str, bool], list[dict]]:
-    facts: dict[str, bool] = {}
-    trace: list[dict] = []
+def assessment(extracted: dict) -> list[dict]:
+    facts_dict = extracted.get("facts", {})
+    rows = []
     for rule in LEGAL_RULES:
-        for key, label in rule.fact_labels.items():
-            if key in facts:
-                continue
-            item = extracted.get("facts", {}).get(key, {})
-            quotes = item.get("quotes", []) if isinstance(item, dict) else []
-            supported = bool(item.get("supported")) and isinstance(quotes, list) and any(str(q).strip() for q in quotes)
-            facts[key] = supported
-            trace.append({
-                "Statutory fact": label,
-                "Machine assessment": "Directly supported by facts" if supported else "Not established in material",
-                "Source quotation(s)": " | ".join(str(q) for q in quotes[:2]) if supported else "—"
-            })
-    return facts, trace
+        missing = []
+        for ing in rule.ingredients:
+            item = facts_dict.get(ing, {})
+            supported = bool(item.get("supported")) if isinstance(item, dict) else False
+            if not supported:
+                missing.append(rule.fact_labels.get(ing, ing))
+        
+        status = "PRIMA_FACIE_GATE_PASSED" if not missing else "REQUIRES_VERIFICATION"
+        rows.append({
+            "rule": rule,
+            "status": status,
+            "missing": missing
+        })
+    return rows
 
-def extracted_occurrence_date(extracted: dict) -> Optional[date]:
-    value = extracted.get("occurrence_date_iso")
-    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
-        return None
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        return None
-
-def safe_model_prompt(material: str, incident_date: Optional[date], results: list[dict]) -> str:
+def build_investigation_prompt(material: str, incident_date: Optional[date], results: list[dict], offence_nature: str) -> str:
     framework_text, regime = framework_for(incident_date)
     
-    passed_sections = []
-    verify_sections = []
-    for item in results:
-        r = item["rule"]
-        entry = f"{r.statute} Sec {r.section} (Equivalent: {r.old_law_equivalent}) - {r.title}"
-        if item["status"] == "PRIMA_FACIE_GATE_PASSED":
-            passed_sections.append(entry)
-        else:
-            verify_sections.append(entry)
+    passed_rules = [f"{r['rule'].statute} Sec {r['rule'].section} (సమాన IPC: {r['rule'].old_law_equivalent}) - {r['rule'].title}" 
+                    for r in results if r["status"] == "PRIMA_FACIE_GATE_PASSED"]
+    
+    date_str = incident_date.strftime('%d-%m-%Y') if incident_date else "ధృవీకరించబడలేదు"
+    passed_str = ", ".join(passed_rules) if passed_rules else "ప్రత్యేక రూల్ ఇంజిన్ సెక్షన్లు సరిపోలలేదు, కింద AI విశ్లేషణను అనుసరించండి."
 
     return f"""
-మీరు భారతదేశంలో పనిచేస్తున్న ఒక అనుభవజ్ఞుడైన సీనియర్ పోలీస్ ఇన్వెస్టిగేషన్ ఆఫీసర్ మరియు లీగల్ ఎక్స్‌పర్ట్.
-క్రింది కేసు దస్త్రాన్ని క్షుణ్ణంగా పరిశీలించి స్పష్టమైన, సాధికారిక తెలుగులో దర్యాప్తు నివేదికను రూపొందించండి.
+మీరు భారతదేశంలో పనిచేస్తున్న సీనియర్ పోలీస్ ఇన్వెస్టిగేషన్ ఆఫీసర్ (IO) మరియు క్రిమినల్ లీగల్ ఎక్స్‌పర్ట్.
+క్రింద ఇవ్వబడిన ఫిర్యాదు వివరాలను క్షుణ్ణంగా పరిశీలించి స్పష్టమైన, సాధికారిక తెలుగులో పూర్తి పోలీస్ దర్యాప్తు మార్గదర్శక నివేదికను రూపొందించండి.
 
 సంఘటన వివరాలు:
-- వర్కింగ్ సంఘటన తేదీ: {incident_date.strftime('%d-%m-%Y') if incident_date else 'ధృవీకరించబడలేదు'}
-- వర్తించే చట్టం: {framework_text}
-- పాలన విధానం (Regime): {regime} (సంఘటన 01-07-2024 ముందైతే FIR చట్టపరంగా IPC క్రింద నమోదు కావాలి, అయితే ప్రస్తుత తులనాత్మక అధ్యయనం కొరకు BNS సమాన సెక్షన్లను కూడా వివరించండి).
+- సంఘటన స్వభావం: {offence_nature}
+- సంఘటన జరిగిన తేదీ: {date_str}
+- చట్టపరమైన ఫ్రేమ్‌వర్క్: {framework_text}
+- పద్ధతి (Regime): {regime} (గమనిక: సంఘటన 01-07-2024 ముందైతే ఎఫ్ఐఆర్ IPC కింద నమోదు చేయాలి. అయితే ప్రస్తుతం న్యాయస్థానాలు మరియు అధికారుల అవగాహన కోసం BNS సమాన సెక్షన్లను కూడా పక్కన సూచించండి).
+- ప్రాథమికంగా సరిపోలిన సెక్షన్లు: {passed_str}
 
-రూల్ ఇంజిన్ ఫలితాలు:
-- PRIMA FACIE గా నిర్ధారించబడిన సెక్షన్లు: {', '.join(passed_sections) or 'None'}
-- పరిశీలనలో ఉన్న సెక్షన్లు: {', '.join(verify_sections) or 'None'}
+ముఖ్యమైన నిబంధన:
+- BSA అంటే "భారతీయ సాక్ష్య అధినియం, 2023" (Bharatiya Sakshya Adhiniyam, 2023). బ్యాంకింగ్ చట్టాలతో గందరగోళం చెందవద్దు. ఎలక్ట్రానిక్ సాక్ష్యాలకు BSA Section 63 (పాత IEA 65B సమానం) సర్టిఫికేషన్ అవసరం.
 
-ముఖ్యమైన సూచన: 
-BSA అంటే "భారతీయ సాక్ష్య అధినియం, 2023" (Bharatiya Sakshya Adhiniyam) మాత్రమే. ఎలక్ట్రానిక్ రికార్డులకు BSA Section 63 (పాత IEA 65B కి సమానం) నిబంధనలు వర్తిస్తాయి.
-
-క్రింది శీర్షికలతో పూర్తి నివేదిక ఇవ్వండి:
-1. సంఘటన సారాంశం (ఫిర్యాది, నిందితులు, పోయిన సొత్తు వివరాలు)
-2. తేదీలు మరియు సమయ కాలవ్యవధి ధృవీకరణ (FIR నమోదులో జాప్యం ఉందా?)
-3. వర్తించే చట్టపరమైన ఫ్రేమ్‌వర్క్ (IPC వర్సెస్ BNS మ్యాపింగ్)
-4. ప్రాథమిక నేర విభాగాలు (Theft & Night House-breaking సెక్షన్ల పూర్తి విశ్లేషణ)
-5. సెక్షన్ల వర్గీకరణ (Cognizable / Bailable / ఏ మెజిస్ట్రేట్ కోర్టు విచారిస్తుంది?)
-6. ఎలక్ట్రానిక్ మరియు డిజిటల్ సాక్ష్యాలు (మొబైల్ ఫోన్, IMEI, CDR, టవర్ లొకేషన్)
-7. BSA Section 63 / IEA Section 65B సర్టిఫికేషన్ మార్గదర్శకాలు
-8. దర్యాప్తు అధికారికి (IO) సమగ్ర దర్యాప్తు ప్రణాళిక (Crime scene inspection, Fingerprints, Clues team, రికవరీ ప్రొసీజర్)
-9. సంప్రదించాల్సిన రికార్డులు & నోటీసులు (BNSS Sec 94/CrPC Sec 91 క్రింద టెలికాం సర్వీస్ ప్రొవైడర్లకు నోటీసులు)
-10. సాక్షుల విచారణ ప్రణాళిక (పంచనామా, రికవరీ పంచలు)
-11. తక్షణ కార్యాచరణ సారాంశం (Final Legal & Investigation View)
+క్రింది క్రమంలో పూర్తి స్థాయి పోలీస్ దర్యాప్తు నివేదిక ఇవ్వండి:
+1. **ఫిర్యాదు సారాంశం**: ఫిర్యాది, నిందితులు (తెలిసినవారా/అపరిచితులా), పోయిన వస్తువులు లేదా జరిగిన నష్టం/దాడి వివరాలు.
+2. **తేదీలు మరియు కాలవ్యవధి విశ్లేషణ**: సంఘటన జరిగిన సమయం, ఫిర్యాదు చేసిన సమయం, ఎఫ్ఐఆర్ నమోదులో జాప్యం ఉంటే దర్యాప్తు అధికారి సమర్థించాల్సిన అంశాలు.
+3. **వర్తించే చట్టపరమైన సెక్షన్ల పూర్తి విశ్లేషణ**:
+   - వర్తించే BNS సెక్షన్లు మరియు సమాన IPC సెక్షన్లు.
+   - నేరం Cognizable ఆ కాదా? Bailable ఆ లేక Non-bailable ఆ? ఏ మేజిస్ట్రేట్ కోర్టు విచారిస్తుంది?
+4. **పోలీసు దర్యాప్తు మార్గదర్శకాలు (Actionable Guidelines for IO)**:
+   - ఘటనా స్థల పరిశీలన (Scene of Crime), క్రైమ్ డీటెయిల్స్ ఫారమ్ (CDF), నక్షా తయారీ.
+   - క్లూస్ టీమ్ (Clues Team), వేలిముద్రలు (Fingerprints), డాగ్ స్క్వాడ్ పరిశీలన.
+   - నిందితుల గుర్తింపు మరియు అరెస్ట్ నియమాలు (BNSS Sec 35 / CrPC Sec 41 మార్గదర్శకాలు).
+5. **సాక్ష్యాధారాల సేకరణ & రికవరీ ప్రొసీజర్**:
+   - దొంగిలించబడిన సొత్తు లేదా నేరానికి వాడిన ఆయుధాల రికవరీ పంచనామా (Seizure Panchanama).
+   - రికవరీ సాక్షులు (Panchas) మరియు మెమోరండం ఆఫ్ కన్ఫెషన్.
+6. **డిజిటల్ & సైబర్ సాక్ష్యాలు (BSA Section 63 మార్గదర్శకాలు)**:
+   - పోయిన మొబైల్ ఫోన్ (IMEI నంబర్ ట్రాకింగ్, CEIR పోర్టల్ ఎంట్రీ).
+   - సీసీటీవీ ఫుటేజ్ (CCTV), కాల్ డాటా రికార్డులు (CDR), టవర్ డంప్ (Tower Dump) సేకరణ.
+   - BNSS Sec 94 / CrPC Sec 91 క్రింద సర్వీస్ ప్రొవైడర్లకు నోటీసులు మరియు BSA Sec 63 సర్టిఫికేట్ తప్పనిసరి ప్రక్రియ.
+7. **సాక్షుల విచారణ ప్రణాళిక**: ఎవరెవరి వాంగ్మూలాలు (180 BNSS / 161 CrPC) నమోదు చేయాలి?
+8. **ముగింపు & తక్షణ కార్యాచరణ**: దర్యాప్తు అధికారి తక్షణమే చేపట్టవలసిన మొదటి 3 చర్యలు.
 
 <CASE_MATERIAL>
 {material}
@@ -372,7 +320,7 @@ BSA అంటే "భారతీయ సాక్ష్య అధినియం
 def run_analysis(material: str, prompt: str) -> str:
     client = groq_client()
     if not client:
-        return "GROQ_API_KEY అమర్చబడలేదు."
+        return "GROQ_API_KEY కాన్ఫిగర్ చేయబడలేదు."
     try:
         response = client.chat.completions.create(
             model=MODEL_NAME,
@@ -384,69 +332,84 @@ def run_analysis(material: str, prompt: str) -> str:
     except Exception as exc:
         return f"Groq API లోపం: {exc}"
 
-# UI సెటప్
+# Streamlit UI
 st.set_page_config(page_title="పోలీస్ లీగల్ రీసెర్చ్ సపోర్ట్", page_icon="⚖️", layout="wide")
-st.title("⚖️ పోలీస్ లీగల్ రీసెర్చ్ & దర్యాప్తు మార్గదర్శక టూల్")
-st.caption("BNS/BNSS/BSA & IPC/CrPC/IEA న్యాయ పరిశోధనా వేదిక — నిర్ణయాత్మక పోలీసు దర్యాప్తు సహకారం.")
+st.title("⚖️ పోలీస్ లీగల్ రీసెర్చ్ & సమగ్ర దర్యాప్తు మార్గదర్శక వేదిక")
+st.caption("BNS / BNSS / BSA మరియు IPC / CrPC / IEA సమగ్ర చట్టాల విశ్లేషణ — అన్ని రకాల నేరాల దర్యాప్తు సహాయకారి.")
 
-complaint = st.text_area("ఫిర్యాదు వివరాలు / Complaint Text", height=200, max_chars=MAX_CHARS)
-uploaded = st.file_uploader("ఫిర్యాదు కాపీ అప్‌లోడ్ చేయండి (PDF, Image, Text)", type=["jpg", "jpeg", "png", "webp", "pdf", "txt"])
+complaint = st.text_area("ఫిర్యాదు వివరాలు నమోదు చేయండి (Complaint / Case Details)", height=200, max_chars=MAX_CHARS)
+uploaded = st.file_uploader("లేదా ఫిర్యాదు కాపీని అప్‌లోడ్ చేయండి (PDF, JPG, PNG, Screenshots, Text)", type=["jpg", "jpeg", "png", "webp", "pdf", "txt"])
 
 extracted, extraction_error = extract_upload(uploaded)
 if extraction_error:
     st.error(extraction_error)
 elif uploaded:
-    with st.expander("అప్‌లోడ్ చేసిన ఫైల్ నుండి సేకరించిన టెక్స్ట్ (Extracted / OCR)"):
+    with st.expander("అప్‌లోడ్ చేసిన ఫైల్ నుండి సేకరించిన టెక్స్ట్ (Extracted / OCR Text)", expanded=False):
         st.text_area("File Text", extracted, height=150, disabled=True)
 
-consent = st.checkbox("ఈ కేసుకు సంబంధించిన వివరాలను AI ద్వారా విశ్లేషించడానికి మరియు పరిశోధించడానికి అంగీకరిస్తున్నాను.")
+consent = st.checkbox("ఈ కేసుకు సంబంధించిన వివరాలను AI ద్వారా విశ్లేషించడానికి మరియు చట్టపరమైన పరిశోధన చేయడానికి అనుమతిస్తున్నాను.")
 
-if st.button("⚖️ చట్టపరమైన విశ్లేషణ మరియు దర్యాప్తు మార్గదర్శకాలను రూపొందించండి", type="primary", use_container_width=True):
+if st.button("⚖️ పూర్తి దర్యాప్తు నివేదిక మరియు లీగల్ సెక్షన్లను రూపొందించండి", type="primary", use_container_width=True):
     material = "COMPLAINT:\n" + text_limit(complaint) + "\n\nEXTRACTED FILE TEXT:\n" + extracted
     if not (complaint.strip() or extracted.strip()):
-        st.error("దయచేసి ఫిర్యాదు టెక్స్ట్‌ను నమోదు చేయండి లేదా సరైన ఫైల్‌ను అప్‌లోడ్ చేయండి.")
+        st.error("దయచేసి ఫిర్యాదు టెక్స్ట్‌ను నమోదు చేయండి లేదా ఏదైనా ఫైల్‌ను అప్‌లోడ్ చేయండి.")
     elif not consent:
-        st.error("దయచేసి విశ్లేషణ కోసం పై చెక్‌బాక్స్‌ను క్లిక్ చేసి అనుమతి ఇవ్వండి.")
+        st.error("దయచేసి పైన ఉన్న చెక్‌బాక్స్‌ను క్లిక్ చేసి అనుమతి ఇవ్వండి.")
     else:
-        with st.spinner("సాక్ష్యాధారాలు, చట్టపరమైన సెక్షన్లు మరియు నిబంధనలు విశ్లేషించబడుతున్నాయి..."):
+        with st.spinner("సాక్ష్యాధారాలు, తేదీలు మరియు సంబంధిత చట్టాలు విశ్లేషించబడుతున్నాయి..."):
             extracted_facts, fact_error = extract_case_facts(material)
 
         if fact_error or extracted_facts is None:
             st.error(fact_error or "ఫ్యాక్ట్స్ సేకరించడం సాధ్యపడలేదు.")
         else:
-            incident_date = extracted_occurrence_date(extracted_facts)
-            facts, trace = cited_facts(extracted_facts)
-            results = assessment(facts, incident_date)
+            # 1. తేదీ నిర్ధారణ
+            raw_date = extracted_facts.get("occurrence_date_iso")
+            incident_date = None
+            if raw_date and re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(raw_date)):
+                try:
+                    incident_date = date.fromisoformat(str(raw_date))
+                except ValueError:
+                    pass
             
-            # 1. తారీఖు మరియు ఫ్రేమ్‌వర్క్ బ్యానర్
+            offence_nature = extracted_facts.get("offence_nature", "General Crime")
             framework_title, regime = framework_for(incident_date)
-            st.subheader("📅 సంఘటన తేదీ & చట్టపరమైన పరిధి")
-            if incident_date:
-                st.info(f"గుర్తించిన సంఘటన తేదీ: **{incident_date:%d-%m-%Y}** ({framework_title})")
-            else:
-                st.warning(framework_title)
-
-            # 2. రూల్ ఇంజిన్ టేబుల్
-            st.subheader("📊 ఆటోమేటెడ్ రూల్ అసెస్‌మెంట్ (Sections Verified)")
-            table = []
-            for item in results:
-                rule = item["rule"]
-                status_label = "✅ Prima Facie వర్తిస్తుంది" if item["status"] == "PRIMA_FACIE_GATE_PASSED" else "⚠️ మరిన్ని వివరాలు అవసరం"
-                table.append({
-                    "చట్టం & సెక్షన్": f"{rule.statute} Sec {rule.section}",
-                    "పాత చట్టం (IPC/IT)": rule.old_law_equivalent,
-                    "నేర వివరణ": rule.title,
-                    "పరిస్థితి": status_label,
-                    "శిక్ష / క్లాసిఫికేషన్": f"{rule.punishment} ({rule.cognizable}, {rule.bailable})"
-                })
-            st.dataframe(table, use_container_width=True, hide_index=True)
-
-            # 3. AI సమగ్ర ఇన్వెస్టిగేషన్ రిపోర్ట్
-            with st.spinner("పూర్తి లీగల్ రిపోర్ట్ & దర్యాప్తు ఆదేశాలు రూపొందించబడుతున్నాయి..."):
-                report = run_analysis(material, safe_model_prompt(material, incident_date, results))
             
-            st.subheader("📋 పోలీసు దర్యాప్తు సమగ్ర నివేదిక & మార్గదర్శకాలు")
-            st.markdown(report)
-            st.download_button("రిపోర్ట్‌ను డౌన్‌లోడ్ చేసుకోండి (TXT)", data=report, file_name="police_investigation_report.txt", mime="text/plain", use_container_width=True)
+            st.subheader("📅 సంఘటన తేదీ & చట్టపరమైన పరిధి")
+            date_info = f"గుర్తించిన సంఘటన తేదీ: **{incident_date.strftime('%d-%m-%Y')}**" if incident_date else "సంఘటన తేదీ నిర్ధారించబడలేదు"
+            st.info(f"{date_info} | నేర స్వభావం: **{offence_nature}**\n\n📌 **{framework_title}**")
 
-st.caption("గమనిక: ఈ నివేదిక పోలీసు అధికారుల చట్టపరమైన పరిశోధన మరియు దర్యాప్తు మార్గదర్శకత్వం కొరకు మాత్రమే. తుది చార్జిషీట్/ఎఫ్ఐఆర్ నమోదులో చట్ట నిబంధనలను స్వతంత్రంగా పరిశీలించండి.")
+            # 2. రూల్ ఇంజిన్ ఫలితాలు
+            results = assessment(extracted_facts)
+            matched_rules = [r for r in results if r["status"] == "PRIMA_FACIE_GATE_PASSED"]
+            
+            if matched_rules:
+                st.subheader("📊 రూల్ ఇంజిన్ ద్వారా నిర్ధారించబడిన ప్రాథమిక సెక్షన్లు")
+                table = []
+                for item in matched_rules:
+                    rule = item["rule"]
+                    table.append({
+                        "BNS సెక్షన్": f"{rule.statute} Sec {rule.section}",
+                        "సమాన IPC సెక్షన్": rule.old_law_equivalent,
+                        "నేర వివరణ": rule.title,
+                        "శిక్ష": rule.punishment,
+                        "వర్గీకరణ": f"{rule.cognizable} / {rule.bailable}",
+                        "విచారణ కోర్టు": rule.court
+                    })
+                st.dataframe(table, use_container_width=True, hide_index=True)
+
+            # 3. AI ద్వారా పూర్తి సమగ్ర నివేదిక తయారీ
+            with st.spinner("పోలీసు దర్యాప్తు మార్గదర్శకాలు (IO Guidelines) సిద్ధమవుతున్నాయి..."):
+                prompt = build_investigation_prompt(material, incident_date, results, offence_nature)
+                report = run_analysis(material, prompt)
+
+            st.subheader("📋 సమగ్ర దర్యాప్తు నివేదిక & పోలీసు అధికారులకు మార్గదర్శకాలు")
+            st.markdown(report)
+            st.download_button(
+                "రిపోర్ట్‌ను డౌన్‌లోడ్ చేసుకోండి (TXT)",
+                data=report,
+                file_name="police_investigation_report.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
+
+st.caption("గమనిక: ఈ సాఫ్ట్‌వేర్ పోలీసు అధికారుల అంతర్గత పరిశోధన మరియు దర్యాప్తు సలహాల కొరకు మాత్రమే. తుది చార్జిషీట్ దాఖలులో సంబంధిత చట్ట నిబంధనలను స్వతంత్రంగా సరిచూసుకోవాలి.")
