@@ -32,7 +32,7 @@ except Exception:
 
 
 NEW_LAWS_START = date(2024, 7, 1)
-MODEL_NAME = "llama-3.3-70b-versatile"  # <-- అప్‌డేట్ చేయబడిన మోడల్ పేరు
+MODEL_NAME = "openai/gpt-oss-120b"  # <-- ప్రస్తుతం Groq లో సపోర్ట్ చేసే మోడల్ పేరు
 MAX_CHARS = 30_000
 TELUGU_DIGITS = str.maketrans("౦౧౨౩౪౫౬౭౮౯", "0123456789")
 ENGLISH_MONTHS = {
