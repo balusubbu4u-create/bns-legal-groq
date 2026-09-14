@@ -1,16 +1,16 @@
+import json
 import os
 from openai import OpenAI
 from io import BytesIO
 from PIL import Image
 import PyPDF2
 
-# Page Config
+# 1. ఇది ఎల్లప్పుడూ మొదటి Streamlit కమాండ్‌గా ఉండాలి
 st.set_page_config(
     page_title="AI Legal & Investigation Assistant",
     page_icon="⚖️",
     layout="wide"
 )
-
 # App UI Header
 st.title("⚖️ BNS / BNSS / BSA Legal & Investigation Engine")
 st.caption("Powered by openai/gpt-oss-120b | భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక")
