@@ -1,5 +1,2 @@
 streamlit
-groq
-pillow
-pypdf
-pytesseract
+openai
