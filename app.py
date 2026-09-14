@@ -16,7 +16,7 @@ import PyPDF2
 
 # App UI Header
 st.title("⚖️ BNS / BNSS / BSA Legal & Investigation Engine")
-st.caption("Powered by Groq API | భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక")
+st.caption("Powered by Groq API (gpt-oss-20b) | భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక")
 
 # Fetch Groq API Key securely from Streamlit Secrets or Environment Variables
 api_key = None
@@ -40,10 +40,9 @@ if api_key:
 # Sidebar for Model Selection and Key fallback
 st.sidebar.header("⚙️ సెట్టింగ్స్")
 selected_model = st.sidebar.selectbox(
-    "Groq మోడల్‌ను ఎంచుకోండి:",
-    options=["llama-3.1-8b-instant", "openai/gpt-oss-120b", "openai/gpt-oss-20b"],
-    index=0,
-    help="llama-3.1-8b-instant ప్రతి Groq అకౌంట్‌లో ఉచితంగా 100% పనిచేస్తుంది."
+    "మోడల్‌ను ఎంచుకోండి:",
+    options=["openai/gpt-oss-20b", "openai/gpt-oss-120b"],
+    index=0
 )
 
 if not api_key:
@@ -167,7 +166,6 @@ if analyze_button:
                         file_text = extract_text_from_file(file)
                         combined_content += f"\nFile Name: {file.name}\n{file_text}\n"
 
-                # Direct OpenAI Client targeted at Groq
                 client = OpenAI(
                     api_key=api_key,
                     base_url=base_url
