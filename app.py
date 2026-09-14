@@ -48,7 +48,25 @@ class LegalRule:
 
 LEGAL_RULES = (
     LegalRule(
-        "bns_303_2", "BNS 2023", "303(2)", "సాధారణ దొంగతనం (Theft)",
+        "bns_318_4", "BNS 2023", "318(4)", "మోసగించి ఆస్తి డెలివరీ చేయించడం / ఆన్‌లైన్ మోసం (Cheating & Fraud)",
+        ("deception", "fraudulent_inducement", "property_delivered"),
+        {"deception": "వంచన/మోసం రుజువైంది", "fraudulent_inducement": "ప్రేరేపించడం", "property_delivered": "ఆస్తి/డెబిట్ డెలివరీ"},
+        "7 సంవత్సరాల వరకు జైలు మరియు జరిమానా.", "Cognizable", "Non-bailable", "Magistrate First Class", "IPC 420"
+    ),
+    LegalRule(
+        "it_66d", "IT Act 2000", "66D", "కంప్యూటర్ వనరుల ద్వారా మోసం / నకిలీ యాప్ లేదా కాల్ (Cheating by Personation)",
+        ("fraudulent_use", "electronic_identifier"),
+        {"fraudulent_use": "దురుద్దేశపూర్వక ఉపయోగం", "electronic_identifier": "నకిలీ యాప్/ఫోన్ కాల్/లింక్ ద్వారా మోసం"},
+        "3 సంవత్సరాల వరకు జైలు మరియు 1 లక్ష జరిమానా.", "Cognizable", "Bailable", "Magistrate First Class", "IT Act 66D"
+    ),
+    LegalRule(
+        "it_66c", "IT Act 2000", "66C", "గుర్తింపు చోరీ / పాస్‌వర్డ్ లేదా ఓటీపీ దుర్వినియోగం (Identity Theft)",
+        ("fraudulent_use", "electronic_identifier"),
+        {"fraudulent_use": "దురుద్దేశపూర్వక ఉపయోగం", "electronic_identifier": "పాస్‌వర్డ్/సిమ్/ఓటీపీ చోరీ"},
+        "3 సంవత్సరాల వరకు జైలు మరియు 1 లక్ష జరిమానా.", "Cognizable", "Bailable", "Magistrate First Class", "IT Act 66C"
+    ),
+    LegalRule(
+        "bns_303_2", "BNS 2023", "303(2)", "సాధారణ దొంగతనం (Theft - భౌతిక ఆస్తి)",
         ("dishonest_intention", "movable_property", "taken_without_consent"),
         {"dishonest_intention": "దురుద్దేశం ధృవీకరించబడింది", "movable_property": "చరాస్తి", "taken_without_consent": "సమ్మతి లేకుండా తీసుకున్నారు"},
         "3 సంవత్సరాల వరకు జైలు, లేదా జరిమానా, లేదా రెండూ.", "Cognizable", "Non-bailable", "Any Magistrate", "IPC 379"
@@ -64,12 +82,6 @@ LEGAL_RULES = (
         ("house_trespass", "by_night", "intent_to_theft"),
         {"house_trespass": "గృహ ప్రవేశం", "by_night": "రాత్రివేళ జరిగింది", "intent_to_theft": "దొంగతనం ఉద్దేశం"},
         "14 సంవత్సరాల వరకు జైలు మరియు జరిమానా.", "Cognizable", "Non-bailable", "Magistrate First Class", "IPC 457"
-    ),
-    LegalRule(
-        "bns_318_4", "BNS 2023", "318(4)", "మోసగించి ఆస్తి డెలివరీ చేయించడం (Cheating)",
-        ("deception", "fraudulent_inducement", "property_delivered"),
-        {"deception": "వంచన/మోసం రుజువైంది", "fraudulent_inducement": "ప్రేరేపించడం", "property_delivered": "ఆస్తి డెలివరీ"},
-        "7 సంవత్సరాల వరకు జైలు మరియు జరిమానా.", "Cognizable", "Non-bailable", "Magistrate First Class", "IPC 420"
     ),
     LegalRule(
         "bns_115_2", "BNS 2023", "115(2)", "స్వచ్ఛందంగా గాయపరచడం (Voluntarily causing hurt)",
@@ -88,12 +100,6 @@ LEGAL_RULES = (
         ("woman_subjected_to_cruelty", "harassment_for_dowry_or_coercion"),
         {"woman_subjected_to_cruelty": "మహిళను వేధించడం", "harassment_for_dowry_or_coercion": "కట్నం వేధింపులు"},
         "3 సంవత్సరాల వరకు జైలు మరియు జరిమానా.", "Cognizable", "Non-bailable", "Magistrate First Class", "IPC 498A"
-    ),
-    LegalRule(
-        "it_66c", "IT Act 2000", "66C", "గుర్తింపు చోరీ / పాస్‌వర్డ్ దుర్వినియోగం (Identity Theft)",
-        ("fraudulent_use", "electronic_identifier"),
-        {"fraudulent_use": "దురుద్దేశపూర్వక ఉపయోగం", "electronic_identifier": "పాస్‌వర్డ్/సిమ్/ఓటీపీ చోరీ"},
-        "3 సంవత్సరాల వరకు జైలు మరియు 1 లక్ష జరిమానా.", "Cognizable", "Bailable", "Magistrate First Class", "IT Act 66C"
     ),
     LegalRule(
         "bns_106_1", "BNS 2023", "106(1)", "నిర్లక్ష్యం వల్ల మరణం (Causing death by negligence)",
@@ -236,7 +242,7 @@ def build_investigation_prompt(material: str, incident_date: Optional[date], res
         "క్రింది క్రమంలో పూర్తి స్థాయి పోలీస్ దర్యాప్తు నివేదిక ఇవ్వండి:\n"
         "1. ఫిర్యాదు సారాంశం (ఫిర్యాది, నిందితులు, పోయిన వస్తువులు/నష్టం వివరాలు).\n"
         "2. తేదీలు మరియు కాలవ్యవధి విశ్లేషణ (ఎఫ్ఐఆర్ నమోదులో జాప్యం ఉంటే వివరణ).\n"
-        "3. వర్తించే చట్టపరమైన సెక్షన్ల పూర్తి విశ్లేషణ (BNS & IPC సెక్షన్లు, Cognizable/Bailable వివరాలు).\n"
+        "3. వర్తించే చట్టపరమైన సెక్షన్ల పూర్తి విశ్లేషణ (BNS 318(4), IT Act 66D, 66C మరియు సంబంధిత సెక్షన్లు, Cognizable/Bailable వివరాలు).\n"
         "4. పోలీసు దర్యాప్తు మార్గదర్శకాలు (ఘటనా స్థల పరిశీలన, క్లూస్ టీమ్, వేలిముద్రలు, అరెస్ట్ నిబంధనలు).\n"
         "5. సాక్ష్యాధారాల సేకరణ & రికవరీ ప్రొసీజర్ (రికవరీ పంచనామా, సాక్షులు).\n"
         "6. డిజిటల్ & సైబర్ సాక్ష్యాలు (మొబైల్ IMEI, CDR, సీసీటీవీ ఫుటేజ్, BSA Sec 63 సర్టిఫికేట్).\n"
@@ -316,8 +322,8 @@ if st.button("⚖️ పూర్తి దర్యాప్తు నివే
                 for item in matched_rules:
                     rule = item["rule"]
                     table.append({
-                        "BNS సెక్షన్": f"{rule.statute} Sec {rule.section}",
-                        "సమాన IPC సెక్షన్": rule.old_law_equivalent,
+                        "సెక్షన్": f"{rule.statute} Sec {rule.section}",
+                        "సమాన పాత చట్టం": rule.old_law_equivalent,
                         "నేర వివరణ": rule.title,
                         "శిక్ష": rule.punishment,
                         "వర్గీకరణ": f"{rule.cognizable} / {rule.bailable}",
