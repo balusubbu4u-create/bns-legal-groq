@@ -1,5 +1,5 @@
 streamlit
 groq
-Pillow
+pillow
 pypdf
 pytesseract
