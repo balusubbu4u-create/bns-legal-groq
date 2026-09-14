@@ -126,10 +126,10 @@ LEGAL_RULES = (
 
 def framework_for(incident_date: Optional[date]) -> str:
     if incident_date is None:
-        return "Occurrence date is not verified — do not finalise a legal framework."
+        return "సంఘటన తేదీ ధృవీకరించబడలేదు — వర్తించే చట్టపరమైన frameworkను తుది నిర్ణయంగా నిర్ధారించలేము."
     if incident_date >= NEW_LAWS_START:
-        return "BNS 2023 + BNSS 2023 + BSA 2023 (subject to current-text verification)."
-    return "Pre-01-07-2024: use IPC, CrPC and Indian Evidence Act subject to savings/transitional provisions."
+        return "BNS 2023 + BNSS 2023 + BSA 2023 (ప్రస్తుత అధికారిక చట్టపాఠ్యంతో స్వతంత్ర ధృవీకరణకు లోబడి ఉంటుంది)."
+    return "01-07-2024కు ముందరి సంఘటన: savings/transitional provisionsకు లోబడి IPC + CrPC + Indian Evidence Actను పరిశీలించాలి."
 
 
 def _valid_date(year: int, month: int, day: int) -> Optional[date]:
@@ -399,7 +399,7 @@ if st.button("⚖️ Analyse uploaded material and generate research report", ty
             if incident_date:
                 st.info(f"Automatically identified working occurrence date: {incident_date:%d-%m-%Y}. Basis: {basis or 'quoted material'}")
             else:
-                st.warning("The supplied material does not clearly establish an occurrence date. The app will not finalise a BNS/BNSS/BSA framework.")
+                st.warning("ఇచ్చిన పత్రాల్లో సంఘటన తేదీ స్పష్టంగా నిర్ధారించబడలేదు. అందువల్ల app BNS/BNSS/BSA చట్టపరమైన frameworkను తుది నిర్ణయంగా నిర్ధారించదు.")
             st.dataframe(trace, use_container_width=True, hide_index=True)
             if results:
                 table = []
