@@ -21,9 +21,24 @@ st.caption("Powered by openai/gpt-oss-120b | భారతీయ నూతన న
 # Fetch OpenRouter API Key securely from Streamlit Secrets or Environment Variables
 api_key = None
 try:
-    api_key = st.secrets["OPENROUTER_API_KEY"]
+    if "OPENROUTER_API_KEY" in st.secrets:
+        api_key = st.secrets["OPENROUTER_API_KEY"]
+    elif "openrouter_api_key" in st.secrets:
+        api_key = st.secrets["openrouter_api_key"]
 except Exception:
+    pass
+
+if not api_key:
     api_key = os.environ.get("OPENROUTER_API_KEY")
+
+# Clean any whitespace, quotes or hidden newlines from the key
+if api_key:
+    api_key = str(api_key).strip().strip('"').strip("'")
+
+# Fallback sidebar option if secrets are missing
+if not api_key:
+    st.sidebar.warning("⚠️ Streamlit Secrets లో API కీ లభించలేదు.")
+    api_key = st.sidebar.text_input("OpenRouter API Key ని ఇక్కడ నమోదు చేయండి:", type="password")
 
 base_url = "https://openrouter.ai/api/v1"
 
@@ -126,7 +141,7 @@ with col_btn:
 
 if analyze_button:
     if not api_key:
-        st.error("API కీ కనుగొనబడలేదు. దయచేసి Streamlit Secrets లో `OPENROUTER_API_KEY` ని కాన్ఫిగర్ చేయండి.")
+        st.error("API కీ కనుగొనబడలేదు. దయచేసి Streamlit Secrets లో `OPENROUTER_API_KEY` ని కాన్ఫిగర్ చేయండి లేదా సైడ్‌బార్‌లో నమోదు చేయండి.")
     elif not user_complaint.strip() and not uploaded_files:
         st.warning("దయచేసి ఫిర్యాదు పాఠ్యాన్ని నమోదు చేయండి లేదా ఏదైనా డాక్యుమెంట్/స్క్రీన్‌షాట్ అప్‌లోడ్ చేయండి.")
     else:
@@ -140,9 +155,14 @@ if analyze_button:
                         file_text = extract_text_from_file(file)
                         combined_content += f"\nFile Name: {file.name}\n{file_text}\n"
 
+                # OpenAI Client configured for OpenRouter with proper headers
                 client = OpenAI(
                     api_key=api_key,
-                    base_url=base_url
+                    base_url=base_url,
+                    default_headers={
+                        "HTTP-Referer": "https://streamlit.io",
+                        "X-Title": "AI Legal Investigation Assistant"
+                    }
                 )
 
                 response = client.chat.completions.create(
