@@ -18,55 +18,47 @@ import easyocr
 
 # App UI Header
 st.title("⚖️ BNS / BNSS / BSA Legal & Investigation Engine")
-st.caption("భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక")
+st.caption("భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక (Powered by Groq / Llama-3.3)")
 
-# --- Robust API Key & Endpoint Detection ---
+# --- Smart Key Selection: OpenAI క్రెడిట్స్ అయిపోతే Groq కి ప్రాధాన్యత ---
 api_key = None
-base_url = None
-is_groq = False
+base_url = "https://api.groq.com/openai/v1"
+selected_model_default = "llama-3.3-70b-versatile"
 
-# 1. First check OpenAI Key in secrets
-for k in ["OPENAI_API_KEY", "openai_api_key"]:
+# 1. First preference to Groq (since it is free and reliable)
+for k in ["GROQ_API_KEY", "groq_api_key", "groq_key", "GROQ_KEY"]:
     if k in st.secrets and st.secrets[k]:
         val = str(st.secrets[k]).strip().strip('"').strip("'")
         if val:
             api_key = val
-            base_url = None
-            is_groq = False
+            base_url = "https://api.groq.com/openai/v1"
             break
 
-# 2. If OpenAI key not found, check Groq Key in secrets
+# 2. Check Groq Environment variable
 if not api_key:
-    for k in ["GROQ_API_KEY", "groq_api_key"]:
+    env_groq = os.environ.get("GROQ_API_KEY")
+    if env_groq:
+        api_key = str(env_groq).strip().strip('"').strip("'")
+        base_url = "https://api.groq.com/openai/v1"
+
+# 3. Fallback to OpenAI only if Groq is not configured
+if not api_key:
+    for k in ["OPENAI_API_KEY", "openai_api_key"]:
         if k in st.secrets and st.secrets[k]:
             val = str(st.secrets[k]).strip().strip('"').strip("'")
             if val:
                 api_key = val
-                base_url = "https://api.groq.com/openai/v1"
-                is_groq = True
+                base_url = None
+                selected_model_default = "gpt-4o"
                 break
 
-# 3. Check environment variables as fallback
-if not api_key:
-    env_openai = os.environ.get("OPENAI_API_KEY")
-    env_groq = os.environ.get("GROQ_API_KEY")
-    if env_openai:
-        api_key = str(env_openai).strip().strip('"').strip("'")
-        base_url = None
-        is_groq = False
-    elif env_groq:
-        api_key = str(env_groq).strip().strip('"').strip("'")
-        base_url = "https://api.groq.com/openai/v1"
-        is_groq = True
-
-# Sidebar: Model Selection only
-st.sidebar.header("⚙️ మోడల్ ఎంపిక")
-
-if is_groq:
-    model_options = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
-else:
+if api_key and not base_url:
     model_options = ["gpt-4o", "gpt-4o-mini"]
+else:
+    model_options = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 
+# Sidebar: Model Selection
+st.sidebar.header("⚙️ మోడల్ ఎంపిక")
 selected_model = st.sidebar.selectbox(
     "మోడల్‌ను ఎంచుకోండి:",
     options=model_options,
@@ -258,7 +250,7 @@ with col_btn:
 
 if analyze_button:
     if not api_key:
-        st.error("❌ API Key లభించలేదు. దయచేసి Streamlit Secrets లో `OPENAI_API_KEY` లేదా `GROQ_API_KEY` సెట్ చేయబడిందో లేదో సరిచూసుకోండి.")
+        st.error("❌ API కీ లభించలేదు. దయచేసి Streamlit Secrets లో `GROQ_API_KEY` సరిగ్గా ఉందో లేదో తనిఖీ చేయండి.")
     elif not user_complaint.strip() and not uploaded_files:
         st.warning("దయచేసి ఫిర్యాదు పాఠ్యాన్ని నమోదు చేయండి లేదా ఏదైనా డాక్యుమెంట్/ఇమేజ్ అప్‌లోడ్ చేయండి.")
     else:
@@ -288,7 +280,8 @@ if analyze_button:
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": f"Analyze this complaint and documents thoroughly. Identify ALL applicable sections and return strictly valid JSON:\n\n{combined_content}"}
                     ],
-                    temperature=0.1
+                    temperature=0.1,
+                    max_tokens=4096
                 )
 
                 raw_output = response.choices[0].message.content.strip()
