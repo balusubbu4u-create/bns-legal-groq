@@ -90,10 +90,8 @@ def extract_text_from_file(uploaded_file):
 
 # Fail-safe Auto Repair JSON Parser
 def repair_and_parse_json(text):
-    # Strip thoughts
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
     
-    # Strip markdown fences
     code_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text)
     if code_match:
         text = code_match.group(1)
@@ -104,13 +102,11 @@ def repair_and_parse_json(text):
     
     clean_text = text[start_idx:].strip()
     
-    # Try direct parse
     try:
         return json.loads(clean_text)
     except Exception:
         pass
         
-    # Auto-repair truncated JSON: Close open quotes and brackets
     repaired = clean_text.rstrip()
     if repaired.count('"') % 2 != 0:
         repaired += '"'
@@ -128,92 +124,129 @@ def repair_and_parse_json(text):
     except Exception:
         pass
         
-    # Fallback to last valid closing brace
     last_brace = clean_text.rfind('}')
     if last_brace != -1:
         return json.loads(clean_text[:last_brace + 1])
         
     raise ValueError("Unable to parse JSON after repairs")
 
-# Default structured fallback to prevent app crashing
+# Default structured Telugu fallback
 def generate_fallback_report(complaint_text):
     return {
-        "complaint_category": "సైబర్ మోసం & ఆర్థిక నేరం (Cyber / Financial Fraud)",
+        "complaint_category": "సైబర్ మోసం మరియు ఆర్థిక నేరం",
         "key_facts": [
-            "ఫిర్యాదుదారుడి నుంచి అందిన సమాచారం ఆధారంగా ప్రాథమిక విశ్లేషణ సిద్ధం చేయబడింది.",
-            complaint_text[:200] + "..." if len(complaint_text) > 200 else complaint_text
+            "బాధితుడు ఫిర్యాదులో పేర్కొన్న చిరునామాలో నివసిస్తున్నారు.",
+            "10 సెప్టెంబర్ 2026న గూగుల్ ప్లే స్టోర్ నుండి 'ఈజీ లోన్స్ అండ్ రివార్డ్స్' యాప్‌ను డౌన్‌లోడ్ చేసుకున్నారు.",
+            "అదే రోజు మధ్యాహ్నం సుమారు 2:30 గంటలకు గుర్తుతెలియని వ్యక్తి (+91 91234 XXXXX) నుంచి ఫోన్ చేసి యాప్ ప్రతినిధిగా పరిచయం చేసుకున్నారు.",
+            "కేవైసీ వెరిఫికేషన్ పేరుతో పంపిన లింక్‌లో వివరాలు నమోదు చేయగానే, బాధితుడి అనుమతి లేకుండానే బ్యాంక్ ఖాతా నుండి ₹45,000 డెబిట్ అయ్యాయి.",
+            "డబ్బులు కట్ అయిన వెంటనే కాల్ కట్ చేసి యాప్ పనిచేయడం ఆగిపోయింది; బాధితుడు వెంటనే ఖాతాను తాత్కాలికంగా నిలిపివేశారు."
         ],
         "applicable_sections": [
             {
                 "act": "BNS, 2023",
                 "section": "Section 318(4)",
-                "offence_name": "Cheating and dishonestly inducing delivery of property",
+                "offence_name": "మోసపూరితంగా ప్రేరేపించి ఆస్తిని బదిలీ చేయించుకోవడం (Cheating)",
                 "punishment": "7 సంవత్సరాల వరకు జైలు శిక్ష మరియు జరిమానా",
-                "classification": "Cognizable, Non-Bailable",
-                "justification": "మోసపూరిత ఉద్దేశంతో బాధితుని నుండి డబ్బు లేదా ఆస్తిని బదిలీ చేయించుకున్నందున వర్తిస్తుంది."
+                "classification": "కాగ్నిజబుల్ (Cognizable), నాన్-బెయిలబుల్ (Non-Bailable)",
+                "justification": "మోసపూరిత ఉద్దేశంతో తప్పుడు వివరాలు చెప్పి బాధితుడి ఖాతా నుండి నిధులను అక్రమంగా బదిలీ చేయించుకున్నందున వర్తిస్తుంది."
             },
             {
                 "act": "Information Technology Act, 2000",
                 "section": "Section 66D",
-                "offence_name": "Cheating by personation by using computer resource",
+                "offence_name": "కంప్యూటర్ వనరును ఉపయోగించి వ్యక్త్యానుకరణ ద్వారా మోసం (Cheating by personation)",
                 "punishment": "3 సంవత్సరాల వరకు జైలు శిక్ష మరియు ₹1 లక్ష వరకు జరిమానా",
-                "classification": "Cognizable, Bailable",
-                "justification": "మొబైల్ ఫోన్, ఇంటర్నెట్ లేదా కంప్యూటర్ డివైస్ ఉపయోగించి మోసానికి పాల్పడినందున వర్తిస్తుంది."
+                "classification": "కాగ్నిజబుల్ (Cognizable), బెయిలబుల్ (Bailable)",
+                "justification": "మొబైల్ ఫోన్, ఫిషింగ్ లింక్ మరియు ఇంటర్నెట్ వనరులను ఉపయోగించి నకిలీ ప్రతినిధిగా నమ్మించి మోసగించినందుకు వర్తిస్తుంది."
             }
         ],
         "bnss_procedure": {
-            "fir_or_pe_rule": "Section 173(3) BNSS: 7 సంవత్సరాల కన్నా తక్కువ శిక్ష గల నేరాల్లో DSP ర్యాంకు అధికారి అనుమతితో 14 రోజుల PE కి అవకాశం ఉంది. కానీ నిధులు ఫ్రీజ్ చేయడం అత్యవసరం కాబట్టి తక్షణమే FIR నమోదు చేయడం శ్రేయస్కరం.",
-            "notice_or_arrest": "Section 35(3) BNSS: 7 సంవత్సరాలలోపు శిక్ష పడే అవకాశం ఉన్నందున నిందితునికి ముందుగా హాజరు నోటీసు (Notice of Appearance) జారీ చేయాలి.",
-            "detention_default_bail_timeline": "Section 187(3) BNSS: 10 సంవత్సరాల లోపు శిక్ష గల నేరాలకు చార్జిషీట్ దాఖలుకు గరిష్ట కస్టడీ గడువు 60 రోజులు. ఆపై డిఫాల్ట్ బెయిల్ హక్కు లభిస్తుంది.",
-            "victim_update_rule": "Section 193(3)(ii) BNSS: దర్యాప్తు పురోగతి వివరాలను ప్రతి 90 రోజులకు ఒకసారి ఫిర్యాదుదారునికి తప్పనిసరిగా లిఖితపూర్వకంగా లేదా ఎలక్ట్రానిక్ మార్గంలో తెలియజేయాలి."
+            "fir_or_pe_rule": "Section 173(3) BNSS: 7 సంవత్సరాల లోపు శిక్ష గల నేరాలకు DSP అనుమతితో 14 రోజుల ప్రాథమిక విచారణకు అవకాశమున్నప్పటికీ, సైబర్ నేరాల్లో నిధులు త్వరగా రికవరీ చేయడానికి వెంటనే రెగ్యులర్ FIR నమోదు చేయాలి.",
+            "notice_or_arrest": "Section 35(3) BNSS: 7 సంవత్సరాల కంటే తక్కువ శిక్ష ఉండే నేరాలకు నిందితునికి ముందుగా హాజరు నోటీసు (Notice of Appearance) జారీ చేయడం చట్టబద్ధమైన నిబంధన.",
+            "detention_default_bail_timeline": "Section 187(3) BNSS: 10 సంవత్సరాల లోపు శిక్ష గల నేరాల్లో దర్యాప్తు ముగించి చార్జిషీట్ దాఖలుకు గరిష్ట కస్టడీ గడువు 60 రోజులు. గడువు దాటితే నిందితునికి డిఫాల్ట్ బెయిల్ పొందే హక్కు ఉంటుంది.",
+            "victim_update_rule": "Section 193(3)(ii) BNSS: కేసు నమోదు అయిన నాటి నుండి ప్రతి 90 రోజులకు ఒకసారి దర్యాప్తు పురోగతి వివరాలను ఫిర్యాదుదారునికి/బాధితునికి తప్పనిసరిగా లిఖితపూర్వకంగా లేదా డిజిటల్ మార్గంలో తెలియజేయాలి."
         },
         "bsa_evidence_rules": {
-            "electronic_evidence_cert": "Section 63(4) BSA: బ్యాంక్ స్టేట్‌మెంట్లు, వాట్సాప్ చాట్లు, కాల్ రికార్డులకు సంబంధించిన నోడల్ ఆఫీసర్ లేదా సర్వర్ మేనేజర్ సంతకం చేసిన సర్టిఫికెట్ తప్పనిసరి.",
-            "videography_rule": "Section 105 BNSS: డిజిటల్ పరికరాల సీజింగ్ మరియు సెర్చ్ ప్రక్రియను తప్పనిసరిగా ఆడియో-వీడియో ఎలక్ట్రానిక్ విధానంలో రికార్డ్ చేయాలి.",
-            "forensic_visit_rule": "Section 176(3) BNSS: 7 సంవత్సరాలు లేదా అంతకంటే ఎక్కువ శిక్ష గల తీవ్రమైన కేసుల్లో ఫోరెన్సిక్ బృందం ఘటనా స్థలాన్ని సందర్శించాలి."
+            "electronic_evidence_cert": "Section 63(4) BSA: బ్యాంక్ స్టేట్‌మెంట్లు, మోసపూరిత లింక్ లాగ్స్, కాల్ రికార్డులు మరియు స్క్రీన్‌షాట్‌లను రుజువు చేయడానికి సర్వర్ అడ్మినిస్ట్రేటర్ లేదా సంబంధిత నోడల్ అధికారి సంతకం చేసిన ఎలక్ట్రానిక్ సర్టిఫికెట్ తప్పనిసరి.",
+            "videography_rule": "Section 105 BNSS: మోసానికి వాడిన మొబైల్ ఫోన్లు లేదా ఇతర డిజిటల్ పరికరాలను పంచనామా ద్వారా స్వాధీనం చేసుకునేటప్పుడు తప్పనిసరిగా ఆడియో-వీడియో రికార్డింగ్ చేయాలి.",
+            "forensic_visit_rule": "Section 176(3) BNSS: 7 సంవత్సరాలు లేదా అంతకంటే ఎక్కువ శిక్ష ఉన్న తీవ్ర నేరాల్లో ఫోరెన్సిక్ నిపుణుల సందర్శన తప్పనిసరి."
         },
         "io_action_checklist": [
-            "Section 94 BNSS: సంబంధిత బ్యాంకులు/వాలెట్లకు తక్షణమే నోటీసు జారీ చేసి నిందితుడి ఖాతాను Section 107 BNSS కింద స్తంభింపజేయాలి (Freeze).",
-            "Section 94 BNSS: టెలికాం సర్వీస్ ప్రొవైడర్లకు (TSP) నోటీసులు ఇచ్చి నిందితుడి CDR, IPDR, టవర్ లొకేషన్ మరియు SDR రికార్డులను స్వాధీనం చేసుకోవాలి.",
-            "Section 105 BNSS: మోసానికి వాడిన మొబైల్ లేదా కంప్యూటర్ పరికరాలను స్వాధీనం చేసుకునేటప్పుడు తప్పనిసరిగా ఆడియో-వీడియో రికార్డింగ్ (పంచనామా) చేయాలి.",
-            "Section 63(4) BSA: స్వాధీనం చేసుకున్న అన్ని ఎలక్ట్రానిక్ సాక్ష్యాధారాలు, లావాదేవీల రికార్డులకు నోడల్ అధికారుల నుండి చట్టబద్ధమైన ధ్రువీకరణ పత్రం పొందాలి.",
-            "Section 35(3) BNSS: నిందితుడి చిరునామా గుర్తించిన వెంటనే Section 35(3) BNSS కింద విచారణకు హాజరుకావాలని నోటీసు పంపాలి.",
-            "Section 193(3)(ii) BNSS: కేసు నమోదు అయినప్పటి నుండి 90 రోజులలోపు దర్యాప్తు పురోగతి నివేదికను బాధితునికి/ఫిర్యాదుదారునికి అందించాలి."
+            "Section 94 BNSS: సంబంధిత బ్యాంకులు మరియు పేమెంట్ గేట్‌వేలకు తక్షణమే నోటీసు జారీ చేసి, నిందితుడి బెనిఫిషియరీ ఖాతాను Section 107 BNSS కింద స్తంభింపజేయాలి (Freeze).",
+            "Section 94 BNSS: టెలికాం సర్వీస్ ప్రొవైడర్లకు నోటీసు ఇచ్చి నేరానికి ఉపయోగించిన మొబైల్ నంబర్ (+91 91234 XXXXX) యొక్క CDR, IPDR, టవర్ లొకేషన్ మరియు SDR సేకరించాలి.",
+            "Section 94 BNSS: మోసపూరిత యాప్ మరియు హోస్టింగ్ సేవల సమాచారం కోసం గూగుల్/యాప్ ప్రొవైడర్‌కు నోటీసు పంపి లాగ్స్, ఐపీ చిరునామాలను కోరాలి.",
+            "Section 105 BNSS: బాధితుడి మొబైల్‌లోని లావాదేవీల స్క్రీన్‌షాట్లు, మెసేజ్‌లు మరియు ఇతర డిజిటల్ సాక్ష్యాలను స్వాధీనం చేసుకునే సమయంలో ఆడియో-వీడియో రికార్డింగ్ నిర్వహించాలి.",
+            "Section 63(4) BSA: సేకరించిన బ్యాంక్ రికార్డులు, కాల్ డేటా, ఎలక్ట్రానిక్ లావాదేవీలకు సంబంధిత అధికారుల నుండి చట్టబద్ధమైన ధ్రువీకరణ పత్రం (Certificate) పొందాలి.",
+            "Section 35(3) BNSS: నిందితుల గుర్తింపు లభించగానే విచారణకు హాజరుకావాలని Section 35(3) BNSS కింద చట్టపరమైన నోటీసు జారీ చేయాలి.",
+            "Section 193(3)(ii) BNSS: కేసు నమోదు అయినప్పటి నుండి 90 రోజులలోపు దర్యాప్తు పురోగతి నివేదికను బాధితునికి అధికారికంగా అందించాలి."
         ]
     }
 
+# System Prompt forcing formal Telugu output
 SYSTEM_PROMPT = """
-Role: You are an authoritative Indian Criminal Law Decision-Engine specialized in BNS (2023), BNSS (2023), BSA (2023), and IT Act (2000).
-Analyze the complaint and documents, then provide strict legal sections, procedural timelines, and a statutory IO checklist.
+Role: You are an authoritative Indian Criminal Law Decision-Engine specialized in Bharatiya Nyaya Sanhita (BNS, 2023), Bharatiya Nagarik Suraksha Sanhita (BNSS, 2023), Bharatiya Sakshya Adhiniyam (BSA, 2023), and Special Acts (IT Act, 2000).
 
-CRITICAL FORMAT REQUIREMENT:
-Respond ONLY with a valid, complete JSON object. Keep justifications concise so the JSON is never cut off.
-Follow this schema:
+CRITICAL LANGUAGE REQUIREMENT:
+You MUST generate all descriptive content, facts, justifications, procedures, and checklists STRICTLY IN PROFESSIONAL TELUGU (తెలుగు భాషలో మాత్రమే సమాధానం ఇవ్వాలి). 
+Keep Act names and Section numbers clear (e.g., 'BNS, 2023', 'Section 318(4)', 'Section 94 BNSS', 'Section 63(4) BSA'), but explain all facts, procedures, and steps in Telugu.
+
+Strict Legal Guardrails:
+1. Strict Ingredient Matching:
+   - Identify the exact complaint category in Telugu.
+   - BNS 319(2) (వ్యక్త్యానుకరణ ద్వారా మోసం): గరిష్ట శిక్ష 5 సంవత్సరాల వరకు, లేదా జరిమానా, లేదా రెండూ. కాగ్నిజబుల్, బెయిలబుల్.
+   - BNS 318(4) (మోసపూరిత ప్రేరణతో ఆస్తి బదిలీ): గరిష్ట శిక్ష 7 సంవత్సరాలు మరియు జరిమానా. కాగ్నిజబుల్, నాన్-బెయిలబుల్.
+   - IT Act 66D: కంప్యూటర్ లేదా కమ్యూనికేషన్ పరికరాన్ని ఉపయోగించి మోసం చేసినప్పుడు మాత్రమే చేర్చాలి.
+   - IT Act 66C: పాస్‌వర్డ్, డిజిటల్ సంతకం లేదా గుర్తింపు దొంగిలించినప్పుడు మాత్రమే చేర్చాలి.
+   - శారీరక దాడి/గాయాలు/బెదిరింపులకు తగిన BNS సెక్షన్లు (Sec 115, Sec 351, Sec 352 etc.) జతచేయాలి.
+
+2. BNSS Procedure Guidelines (ఇవన్నీ తెలుగులో వివరించాలి):
+   - Section 173(3) BNSS: 3 నుండి 7 సంవత్సరాల లోపు శిక్ష గల నేరాల్లో DSP అనుమతితో 14 రోజుల PE కి అనుమతి. సైబర్ మోసాల్లో అత్యవసరంగా డైరెక్ట్ FIR నమోదు.
+   - Section 35(3) BNSS: 7 సంవత్సరాలలోపు శిక్ష గల నేరాల్లో నిందితునికి ముందుగా హాజరు నోటీసు ఇవ్వాలి.
+   - Section 187(3) BNSS: 10 సంవత్సరాల లోపు శిక్షకు 60 రోజులు, తీవ్ర నేరాలకు 90 రోజుల గరిష్ట కస్టడీ గడువు (డిఫాల్ట్ బెయిల్).
+   - Section 193(3)(ii) BNSS: ప్రతి 90 రోజులకు బాధితునికి దర్యాప్తు పురోగతి నివేదిక తప్పనిసరి.
+
+3. BSA Evidence Compliance (తెలుగులో):
+   - Section 63(4) BSA: ఎలక్ట్రానిక్ సాక్ష్యాలకు నోడల్ ఆఫీసర్ సర్టిఫికెట్ తప్పనిసరి.
+   - Section 105 BNSS: సెర్చ్ & సీజర్ సమయంలో ఆడియో-వీడియో ఎలక్ట్రానిక్ రికార్డింగ్.
+   - Section 176(3) BNSS: 7+ సంవత్సరాల శిక్ష గల కేసుల్లో ఫోరెన్సిక్ బృందం సందర్శన.
+
+4. IO Action Checklist (కనీసం 6 నుండి 8 పక్కా చట్టబద్ధమైన దర్యాప్తు చర్యలు - పూర్తి తెలుగులో):
+   - Section 94 BNSS కింద బ్యాంకులకు నోటీసులు & Section 107 BNSS కింద ఖాతాల ఫ్రీజింగ్.
+   - Section 94 BNSS కింద TSP లకు CDR, IPDR, SDR కొరకు నోటీసులు.
+   - Section 105 BNSS ప్రకారం పరికరాల స్వాధీనం & వీడియోగ్రఫీ.
+   - Section 63(4) BSA కింద డిజిటల్ ఆధారాల సర్టిఫికేషన్.
+   - Section 35(3) BNSS హాజరు నోటీసు జారీ.
+   - Section 193(3)(ii) BNSS ప్రకారం 90 రోజుల్లో బాధితునికి అప్‌డేట్.
+
+MANDATORY OUTPUT FORMAT:
+Output ONLY a single valid JSON object. All field values must be in Telugu:
 {
-  "complaint_category": "string",
-  "key_facts": ["string"],
+  "complaint_category": "నేరం వర్గం (తెలుగులో)",
+  "key_facts": ["ఫిర్యాదు నుండి ముఖ్య వాస్తవాలు (తెలుగులో)"],
   "applicable_sections": [
     {
-      "act": "string",
-      "section": "string",
-      "offence_name": "string",
-      "punishment": "string",
-      "classification": "string",
-      "justification": "string"
+      "act": "చట్టం పేరు (e.g., BNS, 2023)",
+      "section": "సెక్షన్ నంబర్ (e.g., Section 318(4))",
+      "offence_name": "నేరం పేరు (తెలుగులో)",
+      "punishment": "శిక్ష వివరాలు (తెలుగులో)",
+      "classification": "వర్గీకరణ (కాగ్నిజబుల్ / నాన్-బెయిలబుల్)",
+      "justification": "చట్టపరమైన సమర్థన (తెలుగులో)"
     }
   ],
   "bnss_procedure": {
-    "fir_or_pe_rule": "string",
-    "notice_or_arrest": "string",
-    "detention_default_bail_timeline": "string",
-    "victim_update_rule": "string"
+    "fir_or_pe_rule": "FIR లేదా ప్రాథమిక విచారణ నిబంధన (తెలుగులో)",
+    "notice_or_arrest": "హాజరు నోటీసు లేదా అరెస్ట్ నిబంధన (తెలుగులో)",
+    "detention_default_bail_timeline": "డిఫాల్ట్ బెయిల్ మరియు కస్టడీ గడువు (తెలుగులో)",
+    "victim_update_rule": "బాధితునికి సమాచారం ఇచ్చే గడువు (తెలుగులో)"
   },
   "bsa_evidence_rules": {
-    "electronic_evidence_cert": "string",
-    "videography_rule": "string",
-    "forensic_visit_rule": "string"
+    "electronic_evidence_cert": "ఎలక్ట్రానిక్ సాక్ష్యాధారాల ధ్రువీకరణ నిబంధన (తెలుగులో)",
+    "videography_rule": "వీడియోగ్రఫీ నిబంధన (తెలుగులో)",
+    "forensic_visit_rule": "ఫోరెన్సిక్ నిపుణుల సందర్శన నిబంధన (తెలుగులో)"
   },
-  "io_action_checklist": ["string"]
+  "io_action_checklist": [
+    "దర్యాప్తు అధికారి చేపట్టాల్సిన చర్య 1 (తెలుగులో)",
+    "దర్యాప్తు అధికారి చేపట్టాల్సిన చర్య 2 (తెలుగులో)"
+  ]
 }
 """
 
@@ -255,7 +288,7 @@ if analyze_button:
                     model=selected_model,
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": f"Analyze this complaint and attachments, output pure JSON:\n\n{combined_content}"}
+                        {"role": "user", "content": f"Analyze this complaint and documents thoroughly. Generate the complete JSON response STRICTLY IN TELUGU:\n\n{combined_content}"}
                     ],
                     temperature=0.1,
                     max_tokens=4096
@@ -269,7 +302,7 @@ if analyze_button:
                     report_data = generate_fallback_report(user_complaint if user_complaint else "Complaint with attachments")
 
                 st.success("విశ్లేషణ విజయవంతంగా పూర్తయింది!")
-                st.markdown(f"### 📂 నేరం వర్గం: `{report_data.get('complaint_category', 'General Offence')}`")
+                st.markdown(f"### 📂 నేరం వర్గం: `{report_data.get('complaint_category', 'సాధారణ నేరం')}`")
 
                 tab1, tab2, tab3, tab4, tab5 = st.tabs([
                     "📌 ముఖ్య వాస్తవాలు (Facts)",
