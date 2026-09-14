@@ -20,46 +20,46 @@ import easyocr
 st.title("⚖️ BNS / BNSS / BSA Legal & Investigation Engine")
 st.caption("భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక")
 
-# Fetch API Key securely (Checks OpenAI, Groq, OpenRouter automatically)
+# --- Robust API Key & Endpoint Detection ---
 api_key = None
 base_url = None
 is_groq = False
 
-try:
-    if "OPENAI_API_KEY" in st.secrets:
-        api_key = st.secrets["OPENAI_API_KEY"]
-        base_url = None
-    elif "openai_api_key" in st.secrets:
-        api_key = st.secrets["openai_api_key"]
-        base_url = None
-    elif "GROQ_API_KEY" in st.secrets:
-        api_key = st.secrets["GROQ_API_KEY"]
-        base_url = "https://api.groq.com/openai/v1"
-        is_groq = True
-    elif "groq_api_key" in st.secrets:
-        api_key = st.secrets["groq_api_key"]
-        base_url = "https://api.groq.com/openai/v1"
-        is_groq = True
-    elif "OPENROUTER_API_KEY" in st.secrets:
-        api_key = st.secrets["OPENROUTER_API_KEY"]
-        base_url = "https://openrouter.ai/api/v1"
-except Exception:
-    pass
+# 1. First check OpenAI Key in secrets
+for k in ["OPENAI_API_KEY", "openai_api_key"]:
+    if k in st.secrets and st.secrets[k]:
+        val = str(st.secrets[k]).strip().strip('"').strip("'")
+        if val:
+            api_key = val
+            base_url = None
+            is_groq = False
+            break
 
-# Check Environment Variables as fallback
+# 2. If OpenAI key not found, check Groq Key in secrets
 if not api_key:
-    if os.environ.get("OPENAI_API_KEY"):
-        api_key = os.environ.get("OPENAI_API_KEY")
+    for k in ["GROQ_API_KEY", "groq_api_key"]:
+        if k in st.secrets and st.secrets[k]:
+            val = str(st.secrets[k]).strip().strip('"').strip("'")
+            if val:
+                api_key = val
+                base_url = "https://api.groq.com/openai/v1"
+                is_groq = True
+                break
+
+# 3. Check environment variables as fallback
+if not api_key:
+    env_openai = os.environ.get("OPENAI_API_KEY")
+    env_groq = os.environ.get("GROQ_API_KEY")
+    if env_openai:
+        api_key = str(env_openai).strip().strip('"').strip("'")
         base_url = None
-    elif os.environ.get("GROQ_API_KEY"):
-        api_key = os.environ.get("GROQ_API_KEY")
+        is_groq = False
+    elif env_groq:
+        api_key = str(env_groq).strip().strip('"').strip("'")
         base_url = "https://api.groq.com/openai/v1"
         is_groq = True
 
-if api_key:
-    api_key = str(api_key).strip().strip('"').strip("'")
-
-# Sidebar: Model Selection only (NO API key input field in sidebar)
+# Sidebar: Model Selection only
 st.sidebar.header("⚙️ మోడల్ ఎంపిక")
 
 if is_groq:
@@ -143,7 +143,7 @@ def repair_and_parse_json(text):
         
     raise ValueError("Unable to parse JSON after repairs")
 
-# Default structured Telugu fallback ensuring sections are present
+# Default structured Telugu fallback
 def generate_fallback_report(complaint_text):
     return {
         "complaint_category": "ఆర్థిక మోసం / సాధారణ నేరం",
@@ -184,7 +184,7 @@ def generate_fallback_report(complaint_text):
         ]
     }
 
-# Universal System Prompt ensuring ALL applicable criminal sections are mapped
+# Universal System Prompt covering ALL offences
 SYSTEM_PROMPT = """
 Role: You are an authoritative Indian Criminal Law Decision-Engine specialized in Bharatiya Nyaya Sanhita (BNS, 2023), Bharatiya Nagarik Suraksha Sanhita (BNSS, 2023), Bharatiya Sakshya Adhiniyam (BSA, 2023), and Special Acts.
 
@@ -258,7 +258,7 @@ with col_btn:
 
 if analyze_button:
     if not api_key:
-        st.error("❌ API కీ కనుగొనబడలేదు. దయచేసి Streamlit Secrets లో `OPENAI_API_KEY` లేదా `GROQ_API_KEY` సరిగ్గా ఉందో లేదో తనిఖీ చేయండి.")
+        st.error("❌ API Key లభించలేదు. దయచేసి Streamlit Secrets లో `OPENAI_API_KEY` లేదా `GROQ_API_KEY` సెట్ చేయబడిందో లేదో సరిచూసుకోండి.")
     elif not user_complaint.strip() and not uploaded_files:
         st.warning("దయచేసి ఫిర్యాదు పాఠ్యాన్ని నమోదు చేయండి లేదా ఏదైనా డాక్యుమెంట్/ఇమేజ్ అప్‌లోడ్ చేయండి.")
     else:
@@ -288,8 +288,7 @@ if analyze_button:
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": f"Analyze this complaint and documents thoroughly. Identify ALL applicable sections and return strictly valid JSON:\n\n{combined_content}"}
                     ],
-                    temperature=0.1,
-                    max_tokens=4096
+                    temperature=0.1
                 )
 
                 raw_output = response.choices[0].message.content.strip()
