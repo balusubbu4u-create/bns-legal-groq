@@ -18,29 +18,58 @@ import easyocr
 
 # App UI Header
 st.title("⚖️ BNS / BNSS / BSA Legal & Investigation Engine")
-st.caption("భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక (Powered by OpenAI GPT)")
+st.caption("భారతీయ నూతన నేర చట్టాల సమగ్ర దర్యాప్తు విశ్లేషణ వేదిక")
 
-# Fetch OpenAI API Key securely strictly from Streamlit Secrets
+# Fetch API Key securely (Checks OpenAI, Groq, OpenRouter automatically)
 api_key = None
+base_url = None
+is_groq = False
+
 try:
     if "OPENAI_API_KEY" in st.secrets:
         api_key = st.secrets["OPENAI_API_KEY"]
+        base_url = None
     elif "openai_api_key" in st.secrets:
         api_key = st.secrets["openai_api_key"]
+        base_url = None
+    elif "GROQ_API_KEY" in st.secrets:
+        api_key = st.secrets["GROQ_API_KEY"]
+        base_url = "https://api.groq.com/openai/v1"
+        is_groq = True
+    elif "groq_api_key" in st.secrets:
+        api_key = st.secrets["groq_api_key"]
+        base_url = "https://api.groq.com/openai/v1"
+        is_groq = True
+    elif "OPENROUTER_API_KEY" in st.secrets:
+        api_key = st.secrets["OPENROUTER_API_KEY"]
+        base_url = "https://openrouter.ai/api/v1"
 except Exception:
     pass
 
+# Check Environment Variables as fallback
 if not api_key:
-    api_key = os.environ.get("OPENAI_API_KEY")
+    if os.environ.get("OPENAI_API_KEY"):
+        api_key = os.environ.get("OPENAI_API_KEY")
+        base_url = None
+    elif os.environ.get("GROQ_API_KEY"):
+        api_key = os.environ.get("GROQ_API_KEY")
+        base_url = "https://api.groq.com/openai/v1"
+        is_groq = True
 
 if api_key:
     api_key = str(api_key).strip().strip('"').strip("'")
 
-# Sidebar: Model Selection only (No API Key input box)
-st.sidebar.header("⚙️ సిస్టమ్ కాన్ఫిగరేషన్")
+# Sidebar: Model Selection only (NO API key input field in sidebar)
+st.sidebar.header("⚙️ మోడల్ ఎంపిక")
+
+if is_groq:
+    model_options = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+else:
+    model_options = ["gpt-4o", "gpt-4o-mini"]
+
 selected_model = st.sidebar.selectbox(
-    "OpenAI మోడల్‌ను ఎంచుకోండి:",
-    options=["gpt-4o", "gpt-4o-mini"],
+    "మోడల్‌ను ఎంచుకోండి:",
+    options=model_options,
     index=0
 )
 
@@ -117,16 +146,16 @@ def repair_and_parse_json(text):
 # Default structured Telugu fallback ensuring sections are present
 def generate_fallback_report(complaint_text):
     return {
-        "complaint_category": "ఆర్థిక మోసం / ఉద్యోగ మోసం",
+        "complaint_category": "ఆర్థిక మోసం / సాధారణ నేరం",
         "key_facts": [
             f"ఫిర్యాదు వివరాలు: {complaint_text[:200]}...",
             "డాక్యుమెంట్ ఆధారంగా చట్టపరమైన సెక్షన్లు వర్తిస్తాయి."
         ],
         "financial_audit": {
-            "total_claimed_paid": "రూ. 5,80,000/-",
-            "refunded_amount": "రూ. 95,000/-",
-            "net_loss_due": "రూ. 4,85,000/-",
-            "reconciliation_status": "లెక్కలు సరిపోయాయి"
+            "total_claimed_paid": "N/A",
+            "refunded_amount": "N/A",
+            "net_loss_due": "N/A",
+            "reconciliation_status": "పరిశీలనలో ఉంది"
         },
         "applicable_sections": [
             {
@@ -135,7 +164,7 @@ def generate_fallback_report(complaint_text):
                 "offence_name": "మోసపూరిత ప్రేరణతో ఆస్తి బదిలీ చేయించుకోవడం",
                 "punishment": "గరిష్టంగా 7 సంవత్సరాల జైలు శిక్ష మరియు జరిమానా",
                 "classification": "కాగ్నిజబుల్, నాన్-బెయిలబుల్",
-                "justification": "ఉద్యోగం ఇప్పిస్తానని నమ్మించి డబ్బులు వసూలు చేసినందున ఈ సెక్షన్ వర్తిస్తుంది."
+                "justification": "ఫిర్యాదులోని అంశాల ఆధారంగా ఈ సెక్షన్ వర్తిస్తుంది."
             }
         ],
         "bnss_procedure": {
@@ -150,19 +179,19 @@ def generate_fallback_report(complaint_text):
             "forensic_visit_rule": "Section 176(3) BNSS వర్తింపు."
         },
         "io_action_checklist": [
-            "బ్యాంకులకు నోటీసులు జారీ చేసి లావాదేవీలు సేకరించాలి.",
+            "సంబంధిత ఆధారాలు మరియు సాక్ష్యాలను సేకరించాలి.",
             "Section 35(3) BNSS కింద నోటీసు ఇవ్వాలి."
         ]
     }
 
-# Universal System Prompt ensuring all sections are correctly mapped
+# Universal System Prompt ensuring ALL applicable criminal sections are mapped
 SYSTEM_PROMPT = """
 Role: You are an authoritative Indian Criminal Law Decision-Engine specialized in Bharatiya Nyaya Sanhita (BNS, 2023), Bharatiya Nagarik Suraksha Sanhita (BNSS, 2023), Bharatiya Sakshya Adhiniyam (BSA, 2023), and Special Acts.
 
 CRITICAL INSTRUCTIONS FOR SECTION MAPPING:
 1. THOROUGH COMPLAINT & OCR ANALYSIS:
    - Read the extracted text from the complaint/documents carefully without bias.
-   - Identify ALL offences mentioned in the text (e.g., Job Scam, Cheating under BNS Section 318(4), Criminal Breach of Trust, Extortion, Assault, Intimidation, Public Servant Misconduct, etc.).
+   - Identify ALL offences mentioned in the text (e.g., Job Scam/Cheating under Section 318(4), Criminal Breach of Trust under Section 316, Theft under Section 303, Extortion under Section 308, Assault under Section 115/118, Intimidation under Section 351, Public Servant Misconduct, IT Act offences, etc.).
    - Dynamically identify and include ALL relevant BNS/Special Act sections in the 'applicable_sections' list without leaving it empty. Match sections accurately to the facts.
 
 2. FINANCIAL & FACTUAL AUDIT:
@@ -229,7 +258,7 @@ with col_btn:
 
 if analyze_button:
     if not api_key:
-        st.error("❌ OpenAI API కీ కనుగొనబడలేదు. దయచేసి Streamlit Secrets లో `OPENAI_API_KEY` ని కాన్ఫిగర్ చేయండి.")
+        st.error("❌ API కీ కనుగొనబడలేదు. దయచేసి Streamlit Secrets లో `OPENAI_API_KEY` లేదా `GROQ_API_KEY` సరిగ్గా ఉందో లేదో తనిఖీ చేయండి.")
     elif not user_complaint.strip() and not uploaded_files:
         st.warning("దయచేసి ఫిర్యాదు పాఠ్యాన్ని నమోదు చేయండి లేదా ఏదైనా డాక్యుమెంట్/ఇమేజ్ అప్‌లోడ్ చేయండి.")
     else:
@@ -248,7 +277,10 @@ if analyze_button:
                 with st.expander("📄 అప్‌లోడ్ చేసిన పత్రాల నుండి సేకరించిన పాఠ్యం (OCR Raw Text)", expanded=False):
                     st.text(combined_content)
 
-                client = OpenAI(api_key=api_key)
+                if base_url:
+                    client = OpenAI(api_key=api_key, base_url=base_url)
+                else:
+                    client = OpenAI(api_key=api_key)
 
                 response = client.chat.completions.create(
                     model=selected_model,
