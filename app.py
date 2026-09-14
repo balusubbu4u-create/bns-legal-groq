@@ -54,7 +54,7 @@ if api_key:
     try:
         temp_client = OpenAI(api_key=api_key, base_url=base_url)
         models_data = temp_client.models.list()
-        # Filter only chat/text generation models (exclude whisper audio and guard models)
+        # Filter text generation models
         fetched_models = [
             m.id for m in models_data.data 
             if not any(x in m.id.lower() for x in ["whisper", "audio", "guard", "orpheus"])
@@ -113,16 +113,16 @@ def clean_and_parse_json(text):
         
     return json.loads(text.strip())
 
-# System Prompt with Strict Legal Guardrails
+# System Prompt with Strict Legal Guardrails & Exhaustive IO Statutory Checklist
 SYSTEM_PROMPT = """
 Role: You are an authoritative Indian Criminal Law Decision-Engine specialized in Bharatiya Nyaya Sanhita (BNS, 2023), Bharatiya Nagarik Suraksha Sanhita (BNSS, 2023), Bharatiya Sakshya Adhiniyam (BSA, 2023), and Special Acts (such as IT Act, 2000).
 
-Task: Analyze the complaint and documents, and produce strict statutory sections, procedural guidelines, evidence rules, and IO action checklists.
+Task: Analyze the user complaint and uploaded document contents, then extract strict statutory sections, procedural guidelines, evidence rules, and an EXHAUSTIVE, ACTIONABLE IO (Investigating Officer) Checklist with exact statutory sections.
 
 Strict Legal Guardrails:
 1. Strict Ingredient Matching:
    - Identify the exact complaint category.
-   - BNS 319(2) (Cheating by personation): Max punishment up to 5 years, fine, or both. Cognizable, Bailable.
+   - BNS 319(2) (Cheating by personation): Max 5 years, or fine, or both. Cognizable, Bailable.
    - BNS 318(4) (Cheating & dishonest inducement): Max 7 years and fine. Cognizable, Non-Bailable.
    - IT Act 66D: Add ONLY if cheating was done using a computer resource/communication device.
    - IT Act 66C: Add ONLY if electronic signature, password, or unique identity was stolen/used.
@@ -130,17 +130,31 @@ Strict Legal Guardrails:
 
 2. BNSS Procedure Guidelines:
    - Section 173(3) BNSS: Preliminary Enquiry (PE) up to 14 days permissible ONLY for offences punishable with 3 to 7 years, strictly requiring PRIOR PERMISSION of an officer not below DSP rank.
-   - Section 35(3) BNSS: Notice of Appearance is statutory before arrest for offences under 7 years.
-   - Section 187(3) BNSS: Clarify 60-day or 90-day detention threshold for default bail.
+   - Section 35(3) BNSS: Notice of Appearance before arrest for offences punishable with less than 7 years.
+   - Section 187(3) BNSS: 60-day or 90-day detention threshold for default bail.
    - Section 193 BNSS: Final report without delay, victim update every 90 days under Sec 193(3)(ii).
 
 3. BSA Evidence Compliance:
-   - Section 63(4) BSA: Require prescribed certification for electronic evidence.
+   - Section 63(4) BSA: Prescribed electronic evidence certificate.
    - Section 105 BNSS: Mandatory audio-video electronic recording during search and seizure.
    - Section 176(3) BNSS: Mandatory crime scene forensic visit for offences punishable with 7+ years.
 
+4. IO Action Checklist Requirements (MUST BE HIGHLY SPECIFIC & STATUTORY):
+   - Provide minimum 6 to 8 exhaustive, tactical, sequential investigative steps.
+   - Do NOT give one-line generic points. Every checklist item MUST explicitly cite the relevant legal section and operational protocol.
+   - Examples of detailed checklist items:
+     * Issue statutory notice under Section 94 BNSS to relevant Banks/Payment Gateways/Wallets to freeze the beneficiary account immediately under Section 107 BNSS, and requisition KYC, account opening forms, IP transaction logs, and full statement of accounts.
+     * Issue Section 94 BNSS notice to Telecom Service Providers (TSP) requesting Call Detail Records (CDR), IPDR (Internet Protocol Detail Records), Subscriber Detail Records (SDR), and cell tower location coordinates for suspect mobile numbers.
+     * Issue Section 94 BNSS notices to online intermediaries (WhatsApp/Meta, Google, Telegram, etc.) requesting registration details, IP logs, IMEI, and communication logs.
+     * Conduct search and seizure strictly following Section 105 BNSS with mandatory audio-video electronic recording of the entire seizure process and preparation of seizure memo/panchnama.
+     * Secure and seize digital devices (smartphones, laptops, SIM cards) following digital chain of custody protocols; pack in Faraday bags/anti-static bags and deposit into safe Malkhana custody.
+     * Obtain mandatory statutory Certificate under Section 63(4) of Bharatiya Sakshya Adhiniyam (BSA) from the concerned Nodal Officers, System Administrators, or device custodians for all electronic records, emails, chats, and CDRs.
+     * Issue statutory Notice of Appearance under Section 35(3) BNSS to the suspect; if the accused fails to comply or custodial arrest is deemed necessary under Section 35(1) BNSS, record reasons in writing prior to effecting arrest.
+     * Ensure mandatory crime scene visit by Forensic experts under Section 176(3) BNSS if applicable (offences punishable with 7+ years).
+     * Provide statutory progress update to the complainant/victim within 90 days of FIR registration as mandated under Section 193(3)(ii) BNSS.
+
 MANDATORY OUTPUT FORMAT:
-You must output a single valid JSON object. Do not include markdown ticks, reasoning, or introductions.
+Output ONLY a single valid JSON object without markdown code fences, reasoning steps, or conversational text.
 {
   "complaint_category": "string",
   "key_facts": ["string"],
@@ -165,7 +179,9 @@ You must output a single valid JSON object. Do not include markdown ticks, reaso
     "videography_rule": "string",
     "forensic_visit_rule": "string"
   },
-  "io_action_checklist": ["string"]
+  "io_action_checklist": [
+    "string"
+  ]
 }
 """
 
@@ -208,7 +224,6 @@ if analyze_button:
                     base_url=base_url
                 )
 
-                # Call model
                 response = client.chat.completions.create(
                     model=selected_model,
                     messages=[
@@ -275,12 +290,12 @@ if analyze_button:
                     st.markdown(f"**ఫోరెన్సిక్ నిపుణుల సందర్శన (Section 176(3) BNSS):**\n\n{bsa.get('forensic_visit_rule')}")
 
                 with tab5:
-                    st.subheader("దర్యాప్తు అధికారి (IO) చేపట్టాల్సిన పనుల జాబితా")
+                    st.subheader("దర్యాప్తు అధికారి (IO) చేపట్టాల్సిన పనుల జాబితా (Statutory IO Checklist)")
                     for idx, task in enumerate(report_data.get("io_action_checklist", []), 1):
                         st.checkbox(task, key=f"io_task_{idx}")
 
             except json.JSONDecodeError:
-                st.error("మోడల్ నుండి వచ్చిన సమాధానం సరిగ్గా JSON లోకి మారలేదు. కింద మోడల్ ఇచ్చిన సమాధానాన్ని చూడవచ్చు:")
+                st.error("మోడల్ నుండి వచ్చిన సమాధానం సరిగ్గా JSON లోకి మారలేదు. డీబగ్గింగ్ కోసం మోడల్ ఇచ్చిన పూర్తి సమాధానం కింద చూడండి:")
                 st.code(raw_output)
             except Exception as e:
                 st.error(f"విశ్లేషణ సమయంలో సమస్య ఏర్పడింది: {str(e)}")
