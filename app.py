@@ -168,10 +168,26 @@ def extract_case_facts(material: str) -> tuple[Optional[dict], str]:
     schema = {key: {"supported": False, "quotes": []} for key in fact_keys}
     
     prompt = (
-        "You are an Indian police legal-research AI.\n"
-        "Extract facts from the following untrusted case complaint. Return JSON only, with no markdown fences.\n\n"
-        "Required JSON structure:\n"
-        "{\n"
+    "You are an expert Indian police legal-research AI.\n"
+    "Your primary duty is to strictly use NEW Indian criminal laws: BNS (Bharatiya Nyaya Sanhita, 2023), "
+    "BNSS (Bharatiya Nagarik Suraksha Sanhita, 2023), and BSA (Bharatiya Sakshya Adhiniyam, 2023). "
+    "NEVER use obsolete IPC or CrPC sections.\n\n"
+    "Mandatory Law Mappings to follow if applicable:\n"
+    "- Causing death by negligence -> BNS Section 106 (NOT IPC 304A or IPC 318)\n"
+    "- Murder -> BNS Section 103 (NOT IPC 302)\n"
+    "- Inquest / Unnatural death inquiry -> BNSS Section 194 (NOT CrPC 174)\n"
+    "- Police investigation order -> BNSS Section 175 (NOT CrPC 156(3))\n"
+    "- Chargesheet / Final report -> BNSS Section 193 (NOT CrPC 173(2))\n"
+    "- Electronic evidence certification -> BSA Section 63 (NOT Evidence Act Sec 65B)\n\n"
+    "Extract facts from the following untrusted case complaint. Return valid JSON only, with no markdown fences, no extra text, and no backticks.\n\n"
+    "Required JSON structure:\n"
+    "{\n"
+    '  "occurrence_date_iso": "YYYY-MM-DD or null",\n'
+    '  "occurrence_date_basis": "string explaining how occurrence date was found",\n'
+    '  "offence_nature": "e.g. Theft, House Breaking, Cheating, Hurt, Murder Attempt, Cyber Crime, Accident, Unnatural Death",\n'
+    f'  "facts": {json.dumps(schema, ensure_ascii=False)}\n'
+    "}\n\n"
+)
         '  "occurrence_date_iso": "YYYY-MM-DD or null",\n'
         '  "occurrence_date_basis": "string explaining how occurrence date was found",\n'
         '  "offence_nature": "e.g. Theft, House Breaking, Cheating, Hurt, Murder Attempt, Cyber Crime, Accident",\n'
@@ -190,7 +206,7 @@ def extract_case_facts(material: str) -> tuple[Optional[dict], str]:
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0,
+            temperature=0.0,
             max_tokens=3500
         )
         content = response.choices[0].message.content or ""
